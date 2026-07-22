@@ -26,6 +26,14 @@ def _calendar_for(shop):
     return setting.calendar_preference if setting else CalendarPreference.AD
 
 
+def _format_for(shop):
+    """(calendar, date_format) for the shop's report rendering."""
+    setting = AppSetting.objects.filter(shop=shop).first()
+    if setting:
+        return setting.calendar_preference, setting.date_format
+    return CalendarPreference.AD, "DMY_TEXT"
+
+
 def _apply_range(qs, date_from, date_to):
     if date_from:
         qs = qs.filter(entry_date__gte=date_from)
@@ -46,7 +54,7 @@ def build_gold_report(shop, date_from=None, date_to=None, karigar_id=None):
     Columns: Date, Karigar, Order, Gross (g), Carat, Net Dr (g), Net Cr (g),
     Ornament, Remarks. Opening / total / closing render as in-column rows.
     """
-    calendar = _calendar_for(shop)
+    calendar, fmt = _format_for(shop)
     karigar = _resolve_karigar(shop, karigar_id)
 
     qs = GoldEntry.objects.filter(shop=shop).select_related("karigar", "ornament", "order")
@@ -79,7 +87,7 @@ def build_gold_report(shop, date_from=None, date_to=None, karigar_id=None):
             net_cr += e.net_weight_g
             ent_cr += e.net_weight_g
         rows.append([
-            format_date(e.entry_date, calendar),
+            format_date(e.entry_date, calendar, fmt),
             e.karigar.full_name,
             e.order.order_number if e.order else "",
             f"{e.gross_weight_g:.3f}",
@@ -102,10 +110,11 @@ def build_gold_report(shop, date_from=None, date_to=None, karigar_id=None):
         "title": "Gold Ledger Report",
         "shop": shop,
         "calendar": calendar,
+        "date_format": fmt,
         "date_from": date_from,
         "date_to": date_to,
         "karigar": karigar,
-        "columns": ["Date", "Karigar", "Order", "Gross (g)", "Carat", "Net Dr (g)", "Net Cr (g)", "Ornament", "Remarks"],
+        "columns": ["Date", "Karigar", "Order", "Gross (gms)", "Carat", "Net Dr (gms)", "Net Cr (gms)", "Ornament", "Remarks"],
         "opening_row": opening_row,
         "rows": rows,
         "total_row": total_row,
@@ -115,7 +124,7 @@ def build_gold_report(shop, date_from=None, date_to=None, karigar_id=None):
 
 
 def build_cash_report(shop, date_from=None, date_to=None, karigar_id=None):
-    calendar = _calendar_for(shop)
+    calendar, fmt = _format_for(shop)
     karigar = _resolve_karigar(shop, karigar_id)
 
     qs = CashEntry.objects.filter(shop=shop).select_related("karigar", "order")
@@ -146,7 +155,7 @@ def build_cash_report(shop, date_from=None, date_to=None, karigar_id=None):
             credit += e.amount_npr
             ent_cr += e.amount_npr
         rows.append([
-            format_date(e.entry_date, calendar),
+            format_date(e.entry_date, calendar, fmt),
             e.karigar.full_name,
             f"{e.amount_npr:.2f}" if is_dr else "",
             f"{e.amount_npr:.2f}" if not is_dr else "",
@@ -165,10 +174,11 @@ def build_cash_report(shop, date_from=None, date_to=None, karigar_id=None):
         "title": "Cash Ledger Report",
         "shop": shop,
         "calendar": calendar,
+        "date_format": fmt,
         "date_from": date_from,
         "date_to": date_to,
         "karigar": karigar,
-        "columns": ["Date", "Karigar", "Debit (NPR)", "Credit (NPR)", "Remarks"],
+        "columns": ["Date", "Karigar", "Debit (npr)", "Credit (npr)", "Remarks"],
         "opening_row": opening_row,
         "rows": rows,
         "total_row": total_row,
@@ -180,10 +190,11 @@ def build_cash_report(shop, date_from=None, date_to=None, karigar_id=None):
 def report_subtitle(report):
     """Human-readable range + scope line for headers."""
     cal = report["calendar"]
+    fmt = report.get("date_format", "DMY_TEXT")
     parts = []
     if report["date_from"] or report["date_to"]:
-        frm = format_date(report["date_from"], cal) if report["date_from"] else "start"
-        to = format_date(report["date_to"], cal) if report["date_to"] else "today"
+        frm = format_date(report["date_from"], cal, fmt) if report["date_from"] else "start"
+        to = format_date(report["date_to"], cal, fmt) if report["date_to"] else "today"
         parts.append(f"{frm} → {to}")
     parts.append(report["karigar"].full_name if report["karigar"] else "All karigars")
     parts.append(f"Calendar: {cal}")

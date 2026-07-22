@@ -92,4 +92,8 @@ def test_bs_date_conversion_roundtrip():
     bs = format_date(ad, "BS")
     assert "Magh" in bs and bs.endswith("2080")
     assert not bs.endswith("BS")
-    assert format_date(ad, "AD") == "2024-02-10"
+    # AD in each configurable format.
+    assert format_date(ad, "AD", "YMD") == "2024-02-10"
+    assert format_date(ad, "AD", "DMY") == "10/02/2024"
+    assert format_date(ad, "AD", "MDY") == "02/10/2024"
+    assert format_date(ad, "AD", "DMY_TEXT") == "10 Feb 2024"

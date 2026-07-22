@@ -58,6 +58,12 @@ class ManagerUpdateIn(Schema):
 
 class AppSettingSchema(Schema):
     calendar_preference: str
+    date_format: str = "DMY_TEXT"
+
+
+class AppSettingPatch(Schema):
+    calendar_preference: str | None = None
+    date_format: str | None = None
 
 
 class DetailOut(Schema):

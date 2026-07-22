@@ -12,9 +12,10 @@ from ninja_jwt.tokens import RefreshToken
 from apps.common.auth import require_owner, require_staff
 from apps.common.pagination import DefaultPagination
 
-from .models import AppSetting, CalendarPreference, Role
+from .models import AppSetting, CalendarPreference, DateFormat, Role
 from .schemas import (
     AccessOut,
+    AppSettingPatch,
     AppSettingSchema,
     ChangePasswordIn,
     DetailOut,
@@ -105,13 +106,19 @@ def get_settings(request):
 
 
 @router.patch("/settings/", response=AppSettingSchema)
-def update_settings(request, payload: AppSettingSchema):
+def update_settings(request, payload: AppSettingPatch):
     require_staff(request)
-    if payload.calendar_preference not in CalendarPreference.values:
-        raise HttpError(400, "calendar_preference must be 'BS' or 'AD'.")
+    data = payload.dict(exclude_unset=True)
     setting = _get_setting(request)
-    setting.calendar_preference = payload.calendar_preference
-    setting.save(update_fields=["calendar_preference"])
+    if "calendar_preference" in data:
+        if data["calendar_preference"] not in CalendarPreference.values:
+            raise HttpError(400, "calendar_preference must be 'BS' or 'AD'.")
+        setting.calendar_preference = data["calendar_preference"]
+    if "date_format" in data:
+        if data["date_format"] not in DateFormat.values:
+            raise HttpError(400, "Invalid date_format.")
+        setting.date_format = data["date_format"]
+    setting.save()
     return setting
 
 

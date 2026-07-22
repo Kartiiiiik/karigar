@@ -73,9 +73,11 @@ export default function Layout() {
   };
 
   return (
-    <div className="min-h-screen lg:flex">
+    // Exactly one viewport tall; the shell never scrolls — only <main> (and
+    // inner tables) scroll. Uses dvh so mobile browser chrome is respected.
+    <div className="flex h-[100dvh] flex-col overflow-hidden lg:flex-row">
       {/* Mobile top bar */}
-      <header className="flex items-center justify-between border-b border-gray-200 bg-white px-4 py-3 lg:hidden">
+      <header className="flex shrink-0 items-center justify-between border-b border-gray-200 bg-white px-4 py-3 lg:hidden">
         <button onClick={() => setOpen(true)} aria-label="Open menu">
           <Menu size={22} />
         </button>
@@ -87,13 +89,14 @@ export default function Layout() {
         </button>
       </header>
 
-      {/* Sidebar (desktop) / drawer (mobile) */}
+      {/* Sidebar (desktop) / drawer (mobile) — a full-height flex column so the
+          footer logout sits at the bottom without overflowing the viewport. */}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 w-64 transform border-r border-gray-200 bg-white p-4 transition-transform lg:static lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-gray-200 bg-white p-4 transition-transform lg:static lg:translate-x-0 lg:shrink-0 ${
           open ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-        <div className="mb-6 flex items-center justify-between">
+        <div className="mb-6 flex shrink-0 items-center justify-between">
           <span className="flex items-center gap-2 text-lg font-bold text-brand-700">
             <Gem size={22} /> Karigar
           </span>
@@ -102,20 +105,11 @@ export default function Layout() {
           </button>
         </div>
 
-        <NavItems role={role} onNavigate={() => setOpen(false)} />
-
-        {/* Mobile: user + logout inside the drawer */}
-        <div className="mt-6 border-t border-gray-100 pt-4 lg:hidden">
-          <div className="mb-2 rounded-lg bg-gray-50 px-3 py-2 text-sm">
-            <p className="font-medium text-gray-800">{user?.full_name || user?.username}</p>
-            <p className="text-xs capitalize text-gray-500">{role}</p>
-          </div>
-          <button onClick={doLogout} className="btn-secondary w-full">
-            <LogOut size={16} /> Log out
-          </button>
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <NavItems role={role} onNavigate={() => setOpen(false)} />
         </div>
 
-        <div className="absolute inset-x-4 bottom-4 hidden lg:block">
+        <div className="mt-4 shrink-0 border-t border-gray-100 pt-4">
           <div className="mb-2 rounded-lg bg-gray-50 px-3 py-2 text-sm">
             <p className="font-medium text-gray-800">{user?.full_name || user?.username}</p>
             <p className="text-xs capitalize text-gray-500">{role}</p>
@@ -133,8 +127,8 @@ export default function Layout() {
         />
       )}
 
-      {/* Main content */}
-      <main className="flex-1 p-4 lg:p-8">
+      {/* Main content: the only vertically-scrolling region for tall pages. */}
+      <main className="min-h-0 min-w-0 flex-1 overflow-y-auto p-4 lg:p-8">
         <Outlet />
       </main>
     </div>

@@ -9,6 +9,7 @@ import { useSettingsStore } from "../store/settings";
 
 export default function Backups() {
   const calendar = useSettingsStore((s) => s.calendar);
+  const dateFormat = useSettingsStore((s) => s.dateFormat);
   const config = useFetch("/backups/config/");
   const logs = useFetch("/backups/logs/", { page_size: 50 });
   const [msg, setMsg] = useState("");
@@ -67,7 +68,7 @@ export default function Backups() {
           <ul className="divide-y divide-gray-100 text-sm">
             {logs.data.results.map((l) => (
               <li key={l.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
-                <span className="text-gray-500">{formatDate(l.created_at, calendar, { withTime: true })}</span>
+                <span className="text-gray-500">{formatDate(l.created_at, calendar, { withTime: true, format: dateFormat })}</span>
                 <span className="capitalize text-gray-600">{l.triggered_by}</span>
                 <Badge tone={l.status === "success" ? "green" : "red"}>{l.status}</Badge>
                 <span className="w-full text-xs text-gray-400 sm:w-auto">{l.message}</span>

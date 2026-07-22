@@ -8,7 +8,10 @@ import {
   PageHeader, Spinner, EmptyState, ErrorState, Modal, Field, Badge, SortableTh, STICKY_TH,
 } from "../components/ui";
 import DateInput from "../components/DateInput";
-import { formatGrams } from "../lib/format";
+import { formatGrams, formatGramsValue } from "../lib/format";
+
+// Small unit label shown in a column header (keeps rows unit-free).
+const GMS = <sub className="ml-0.5 text-[10px] font-normal text-gray-400">gms</sub>;
 import { formatDate } from "../lib/date";
 import { useSettingsStore } from "../store/settings";
 import { useAuthStore } from "../store/auth";
@@ -27,10 +30,10 @@ export default function Gold() {
   const isStaff = role === "owner" || role === "manager";
 
   return (
-    <div>
+    <div className="flex h-full flex-col">
       <PageHeader title="Gold Ledger" subtitle="Balances are net weight (grams). Dr = given, Cr = received." />
 
-      <div className="mb-4 flex gap-2 border-b border-gray-200">
+      <div className="mb-4 flex shrink-0 gap-2 border-b border-gray-200">
         {["entries", "orders"].map((t) => (
           <button
             key={t}
@@ -44,7 +47,9 @@ export default function Gold() {
         ))}
       </div>
 
-      {tab === "entries" ? <Entries isStaff={isStaff} /> : <Orders isStaff={isStaff} />}
+      <div className="flex min-h-0 flex-1 flex-col">
+        {tab === "entries" ? <Entries isStaff={isStaff} /> : <Orders isStaff={isStaff} />}
+      </div>
     </div>
   );
 }
@@ -54,6 +59,7 @@ export default function Gold() {
 // ---------------------------------------------------------------------------
 function Entries({ isStaff }) {
   const calendar = useSettingsStore((s) => s.calendar);
+  const dateFormat = useSettingsStore((s) => s.dateFormat);
   const [filters, setFilters] = useState({ karigar: "", direction: "", search: "" });
   const [ordering, setOrdering] = useState("-entry_date");
 
@@ -113,11 +119,11 @@ function Entries({ isStaff }) {
   const totalBottom = selected ? "bottom-10" : "bottom-0";
   const act = isStaff ? [""] : [];
   const openingCells = ["Opening", selected?.full_name ?? "", "", "",
-    openingInDr ? formatGrams(openingAbs) : "", !openingInDr ? formatGrams(openingAbs) : "", "", "", ...act];
+    openingInDr ? formatGramsValue(openingAbs) : "", !openingInDr ? formatGramsValue(openingAbs) : "", "", "", ...act];
   const totalCells = [`Total (${summary.data?.count ?? count})`, "", "", "",
-    formatGrams(totalNetDr), formatGrams(totalNetCr), "", "", ...act];
+    formatGramsValue(totalNetDr), formatGramsValue(totalNetCr), "", "", ...act];
   const closingCells = [`Closing (${goldClosing >= 0 ? "Dr" : "Cr"})`, "", "", "",
-    goldClosing >= 0 ? formatGrams(goldClosing) : "", goldClosing < 0 ? formatGrams(-goldClosing) : "", "", "", ...act];
+    goldClosing >= 0 ? formatGramsValue(goldClosing) : "", goldClosing < 0 ? formatGramsValue(-goldClosing) : "", "", "", ...act];
 
   return (
     <div>
@@ -176,10 +182,10 @@ function Entries({ isStaff }) {
               <tr>
                 <SortableTh label="Date" field="entry_date" ordering={ordering} onSort={sort} />
                 <th className={STICKY_TH}>Karigar</th>
-                <SortableTh label="Gross" field="gross_weight_g" ordering={ordering} onSort={sort} />
+                <SortableTh label={<>Gross{GMS}</>} field="gross_weight_g" ordering={ordering} onSort={sort} />
                 <SortableTh label="Carat" field="carat" ordering={ordering} onSort={sort} />
-                <SortableTh label="Net Dr" field="net_weight_g" ordering={ordering} onSort={sort} />
-                <SortableTh label="Net Cr" field="net_weight_g" ordering={ordering} onSort={sort} />
+                <SortableTh label={<>Net Dr{GMS}</>} field="net_weight_g" ordering={ordering} onSort={sort} />
+                <SortableTh label={<>Net Cr{GMS}</>} field="net_weight_g" ordering={ordering} onSort={sort} />
                 <SortableTh label="Ornament" field="ornament__name" ordering={ordering} onSort={sort} />
                 <th className={STICKY_TH}>Order</th>
                 {isStaff && <th className={STICKY_TH}></th>}
@@ -191,12 +197,12 @@ function Entries({ isStaff }) {
               )}
               {items.map((e) => (
                 <tr key={e.id} className="hover:bg-gray-50">
-                  <td className={`${bodyTd} whitespace-nowrap text-gray-600`}>{formatDate(e.entry_date, calendar)}</td>
+                  <td className={`${bodyTd} whitespace-nowrap text-gray-600`}>{formatDate(e.entry_date, calendar, { format: dateFormat })}</td>
                   <td className={bodyTd}>{e.karigar_name}</td>
-                  <td className={bodyTd}>{formatGrams(e.gross_weight_g)}</td>
+                  <td className={bodyTd}>{formatGramsValue(e.gross_weight_g)}</td>
                   <td className={bodyTd}>{e.carat}kt</td>
-                  <td className={`${bodyTd} font-medium text-amber-700`}>{e.direction === "dr" ? formatGrams(e.net_weight_g) : ""}</td>
-                  <td className={`${bodyTd} font-medium text-green-700`}>{e.direction === "cr" ? formatGrams(e.net_weight_g) : ""}</td>
+                  <td className={`${bodyTd} font-medium text-amber-700`}>{e.direction === "dr" ? formatGramsValue(e.net_weight_g) : ""}</td>
+                  <td className={`${bodyTd} font-medium text-green-700`}>{e.direction === "cr" ? formatGramsValue(e.net_weight_g) : ""}</td>
                   <td className={`${bodyTd} text-gray-600`}>{e.ornament_name || "—"}</td>
                   <td className={`${bodyTd} text-gray-600`}>{e.order || "—"}</td>
                   {isStaff && (

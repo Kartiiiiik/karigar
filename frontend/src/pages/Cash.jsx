@@ -6,13 +6,17 @@ import { ArrowUpRight, ArrowDownLeft, Pencil } from "lucide-react";
 import api, { apiError } from "../lib/api";
 import { useFetch } from "../hooks/useFetch";
 import { PageHeader, Spinner, EmptyState, ErrorState, Modal, Field, SortableTh, STICKY_TH } from "../components/ui";
-import { formatNpr } from "../lib/format";
+import { formatAmount } from "../lib/format";
+
+// Unit label for column headers (keeps rows unit-free).
+const NPR = <sub className="ml-0.5 text-[10px] font-normal text-gray-400">npr</sub>;
 import { formatDate } from "../lib/date";
 import { useSettingsStore } from "../store/settings";
 import { useAuthStore } from "../store/auth";
 
 export default function Cash() {
   const calendar = useSettingsStore((s) => s.calendar);
+  const dateFormat = useSettingsStore((s) => s.dateFormat);
   const role = useAuthStore((s) => s.user?.role);
   const isStaff = role === "owner" || role === "manager";
   const [filters, setFilters] = useState({ karigar: "", direction: "", search: "" });
@@ -71,11 +75,11 @@ export default function Cash() {
   const totalBottom = selected ? "bottom-10" : "bottom-0";
   const act = isStaff ? [""] : [];
   const openingCells = ["Opening", selected?.full_name ?? "",
-    openingInDr ? formatNpr(openingAbs) : "", !openingInDr ? formatNpr(openingAbs) : "", "", ...act];
+    openingInDr ? formatAmount(openingAbs) : "", !openingInDr ? formatAmount(openingAbs) : "", "", ...act];
   const totalCells = [`Total (${summary.data?.count ?? count})`, "",
-    formatNpr(totalDebit), formatNpr(totalCredit), "", ...act];
+    formatAmount(totalDebit), formatAmount(totalCredit), "", ...act];
   const closingCells = [`Closing (${cashClosing >= 0 ? "Dr" : "Cr"})`, "",
-    cashClosing >= 0 ? formatNpr(cashClosing) : "", cashClosing < 0 ? formatNpr(-cashClosing) : "", "", ...act];
+    cashClosing >= 0 ? formatAmount(cashClosing) : "", cashClosing < 0 ? formatAmount(-cashClosing) : "", "", ...act];
 
   return (
     <div>
@@ -136,8 +140,8 @@ export default function Cash() {
               <tr>
                 <SortableTh label="Date" field="entry_date" ordering={ordering} onSort={sort} />
                 <th className={STICKY_TH}>Karigar</th>
-                <SortableTh label="Debit Amount" field="amount_npr" ordering={ordering} onSort={sort} />
-                <SortableTh label="Credit Amount" field="amount_npr" ordering={ordering} onSort={sort} />
+                <SortableTh label={<>Debit{NPR}</>} field="amount_npr" ordering={ordering} onSort={sort} />
+                <SortableTh label={<>Credit{NPR}</>} field="amount_npr" ordering={ordering} onSort={sort} />
                 <th className={STICKY_TH}>Remarks</th>
                 {isStaff && <th className={STICKY_TH}></th>}
               </tr>
@@ -148,10 +152,10 @@ export default function Cash() {
               )}
               {items.map((e) => (
                 <tr key={e.id} className="hover:bg-gray-50">
-                  <td className={`${bodyTd} whitespace-nowrap text-gray-600`}>{formatDate(e.entry_date, calendar)}</td>
+                  <td className={`${bodyTd} whitespace-nowrap text-gray-600`}>{formatDate(e.entry_date, calendar, { format: dateFormat })}</td>
                   <td className={bodyTd}>{e.karigar_name}</td>
-                  <td className={`${bodyTd} font-medium text-amber-700`}>{e.direction === "dr" ? formatNpr(e.amount_npr) : ""}</td>
-                  <td className={`${bodyTd} font-medium text-green-700`}>{e.direction === "cr" ? formatNpr(e.amount_npr) : ""}</td>
+                  <td className={`${bodyTd} font-medium text-amber-700`}>{e.direction === "dr" ? formatAmount(e.amount_npr) : ""}</td>
+                  <td className={`${bodyTd} font-medium text-green-700`}>{e.direction === "cr" ? formatAmount(e.amount_npr) : ""}</td>
                   <td className={`${bodyTd} text-gray-500`}>{e.remarks || "—"}</td>
                   {isStaff && (
                     <td className={`${bodyTd} text-right`}>

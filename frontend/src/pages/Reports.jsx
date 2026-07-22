@@ -17,6 +17,7 @@ const footTd = "sticky z-20 h-10 whitespace-nowrap border-t border-amber-200 bg-
 
 export default function Reports() {
   const calendar = useSettingsStore((s) => s.calendar);
+  const dateFormat = useSettingsStore((s) => s.dateFormat);
   const { data: karigarData } = useFetch("/karigars/", { page_size: 200 });
   const karigars = karigarData?.results ?? [];
 
@@ -127,14 +128,14 @@ export default function Reports() {
             <input className="input" type="date" value={form.date_from} disabled={monthMode}
               onChange={(e) => setForm((f) => ({ ...f, date_from: e.target.value }))} />
             {calendar === "BS" && form.date_from && !monthMode && (
-              <p className="mt-1 text-xs text-gray-400">{formatDate(form.date_from, "BS")}</p>
+              <p className="mt-1 text-xs text-gray-400">{formatDate(form.date_from, "BS", { format: dateFormat })}</p>
             )}
           </Field>
           <Field label="To (AD)">
             <input className="input" type="date" value={form.date_to} disabled={monthMode}
               onChange={(e) => setForm((f) => ({ ...f, date_to: e.target.value }))} />
             {calendar === "BS" && form.date_to && !monthMode && (
-              <p className="mt-1 text-xs text-gray-400">{formatDate(form.date_to, "BS")}</p>
+              <p className="mt-1 text-xs text-gray-400">{formatDate(form.date_to, "BS", { format: dateFormat })}</p>
             )}
           </Field>
           <div className="flex items-end">

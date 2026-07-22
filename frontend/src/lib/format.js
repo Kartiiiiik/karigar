@@ -11,10 +11,21 @@ export function formatNpr(value) {
   return `NPR ${npr.format(n)}`;
 }
 
+/** Amount only (no NPR prefix), e.g. 12500 -> "12,500.00". For table cells
+ * where the unit lives in the column header. */
+export function formatAmount(value) {
+  return npr.format(Number(value ?? 0));
+}
+
 /** Format grams to 3dp, e.g. "9.167 g". */
 export function formatGrams(value) {
   const n = Number(value ?? 0);
   return `${n.toFixed(3)} g`;
+}
+
+/** Grams value only (no unit), e.g. 9.1667 -> "9.167". */
+export function formatGramsValue(value) {
+  return Number(value ?? 0).toFixed(3);
 }
 
 /**

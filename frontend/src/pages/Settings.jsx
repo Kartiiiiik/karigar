@@ -1,31 +1,44 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
-import { Calendar, Check } from "lucide-react";
+import { Calendar, Check, CalendarClock } from "lucide-react";
 import api, { apiError } from "../lib/api";
 import { PageHeader, ErrorState, Field } from "../components/ui";
 import { useSettingsStore } from "../store/settings";
-import { formatDate } from "../lib/date";
+import { formatDate, DATE_FORMATS } from "../lib/date";
 
 export default function Settings() {
-  const { calendar, setCalendar } = useSettingsStore();
+  const { calendar, setCalendar, dateFormat, setDateFormat } = useSettingsStore();
   const [saving, setSaving] = useState(false);
   const [savedCal, setSavedCal] = useState(false);
+  const [savedFmt, setSavedFmt] = useState(false);
   const [calError, setCalError] = useState("");
 
-  const changeCalendar = async (value) => {
+  const patchSettings = async (payload, onOk) => {
     setSaving(true);
     setCalError("");
-    setSavedCal(false);
     try {
-      await api.patch("/auth/settings/", { calendar_preference: value });
-      setCalendar(value);
-      setSavedCal(true);
+      await api.patch("/auth/settings/", payload);
+      onOk();
     } catch (e) {
       setCalError(apiError(e));
     } finally {
       setSaving(false);
     }
   };
+
+  const changeCalendar = (value) =>
+    patchSettings({ calendar_preference: value }, () => {
+      setCalendar(value);
+      setSavedCal(true);
+      setSavedFmt(false);
+    });
+
+  const changeDateFormat = (value) =>
+    patchSettings({ date_format: value }, () => {
+      setDateFormat(value);
+      setSavedFmt(true);
+      setSavedCal(false);
+    });
 
   const today = new Date().toISOString();
 
@@ -57,9 +70,34 @@ export default function Settings() {
             </button>
           ))}
         </div>
+        {savedCal && <p className="text-xs text-green-600">Calendar saved.</p>}
+      </div>
+
+      <div className="card space-y-3">
+        <h2 className="flex items-center gap-2 font-semibold text-gray-900">
+          <CalendarClock size={18} /> Date format
+        </h2>
+        <p className="text-sm text-gray-500">
+          How dates are written wherever they appear ({calendar} calendar).
+        </p>
+        <Field label="Format">
+          <select
+            className="input"
+            value={dateFormat}
+            disabled={saving}
+            onChange={(e) => changeDateFormat(e.target.value)}
+          >
+            {DATE_FORMATS.map((f) => (
+              <option key={f.value} value={f.value}>{f.label}</option>
+            ))}
+          </select>
+        </Field>
         <p className="text-xs text-gray-400">
-          Today shows as: <span className="font-medium text-gray-600">{formatDate(today, calendar)}</span>
-          {savedCal && <span className="ml-2 text-green-600">Saved</span>}
+          Today shows as:{" "}
+          <span className="font-medium text-gray-600">
+            {formatDate(today, calendar, { format: dateFormat })}
+          </span>
+          {savedFmt && <span className="ml-2 text-green-600">Saved</span>}
         </p>
       </div>
 

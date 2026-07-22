@@ -24,6 +24,14 @@ class CalendarPreference(models.TextChoices):
     AD = "AD", "Gregorian (AD)"
 
 
+class DateFormat(models.TextChoices):
+    # Rendered within the active calendar (BS or AD).
+    DMY_TEXT = "DMY_TEXT", "27 Magh 2080 (day month year)"
+    YMD = "YMD", "2080-10-27 (year-month-day)"
+    DMY = "DMY", "27/10/2080 (day/month/year)"
+    MDY = "MDY", "10/27/2080 (month/day/year)"
+
+
 class Shop(TimeStampedModel):
     """The shop entity. Single-shop MVP, modelled so multi-shop is possible
     later without a rewrite."""
@@ -117,6 +125,11 @@ class AppSetting(TimeStampedModel):
         max_length=2,
         choices=CalendarPreference.choices,
         default=CalendarPreference.BS,
+    )
+    date_format = models.CharField(
+        max_length=10,
+        choices=DateFormat.choices,
+        default=DateFormat.DMY_TEXT,
     )
 
     def __str__(self):

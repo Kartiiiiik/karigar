@@ -12,31 +12,55 @@ const BS_MONTHS = [
   "Baisakh", "Jestha", "Ashadh", "Shrawan", "Bhadra", "Ashwin",
   "Kartik", "Mangsir", "Poush", "Magh", "Falgun", "Chaitra",
 ];
+const AD_MONTHS_SHORT = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
+// Available display formats. Keep the keys in sync with the backend DateFormat.
+export const DATE_FORMATS = [
+  { value: "DMY_TEXT", label: "Day Month Year (27 Magh 2080)" },
+  { value: "YMD", label: "Year-Month-Day (2080-10-27)" },
+  { value: "DMY", label: "Day/Month/Year (27/10/2080)" },
+  { value: "MDY", label: "Month/Day/Year (10/27/2080)" },
+];
 
 function pad(n) {
   return String(n).padStart(2, "0");
 }
 
+function render(year, month, day, monthName, fmt) {
+  switch (fmt) {
+    case "YMD":
+      return `${year}-${pad(month)}-${pad(day)}`;
+    case "DMY":
+      return `${pad(day)}/${pad(month)}/${year}`;
+    case "MDY":
+      return `${pad(month)}/${pad(day)}/${year}`;
+    default: // DMY_TEXT
+      return `${day} ${monthName} ${year}`;
+  }
+}
+
 /**
- * Format an AD date (ISO string or Date) in the active calendar.
+ * Format an AD date (ISO string or Date) in the active calendar + format.
  * @param {string|Date|null|undefined} value  AD date from the API.
  * @param {"BS"|"AD"} calendar                Active display calendar.
- * @param {{withTime?: boolean}} [opts]
+ * @param {{withTime?: boolean, format?: string}} [opts]
  * @returns {string}
  */
 export function formatDate(value, calendar = "AD", opts = {}) {
   if (!value) return "—";
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return "—";
+  const fmt = opts.format || "DMY_TEXT";
 
   let out;
   if (calendar === "BS") {
-    const bs = new NepaliDate(date);
-    const bsObj = bs.getBS(); // { year, month (0-based), date }
-    // e.g. "27 Magh 2080"
-    out = `${bsObj.date} ${BS_MONTHS[bsObj.month]} ${bsObj.year}`;
+    const bs = new NepaliDate(date).getBS(); // { year, month (0-based), date }
+    out = render(bs.year, bs.month + 1, bs.date, BS_MONTHS[bs.month], fmt);
   } else {
-    out = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+    out = render(date.getFullYear(), date.getMonth() + 1, date.getDate(), AD_MONTHS_SHORT[date.getMonth()], fmt);
   }
 
   if (opts.withTime) {

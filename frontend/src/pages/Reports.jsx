@@ -12,8 +12,8 @@ const AD_MONTHS = [
 ];
 
 // Sticky amber cells for the pinned opening row and total/closing footer.
-const openTd = "sticky top-10 z-10 h-10 border-b border-amber-200 bg-amber-50 px-3 font-semibold text-gray-800";
-const footTd = "sticky z-20 h-10 border-t border-amber-200 bg-amber-50 px-3 font-semibold text-gray-800";
+const openTd = "sticky top-10 z-10 h-10 whitespace-nowrap border-b border-amber-200 bg-amber-50 px-3 font-semibold text-gray-800";
+const footTd = "sticky z-20 h-10 whitespace-nowrap border-t border-amber-200 bg-amber-50 px-3 font-semibold text-gray-800";
 
 export default function Reports() {
   const calendar = useSettingsStore((s) => s.calendar);
@@ -189,7 +189,7 @@ export default function Reports() {
                 ) : (
                   report.rows.map((row, i) => (
                     <tr key={i} className="hover:bg-gray-50">
-                      {row.map((cell, j) => <td key={j} className="border-b border-gray-100 px-3 py-2">{cell}</td>)}
+                      {row.map((cell, j) => <td key={j} className="whitespace-nowrap border-b border-gray-100 px-3 py-2">{cell}</td>)}
                     </tr>
                   ))
                 )}

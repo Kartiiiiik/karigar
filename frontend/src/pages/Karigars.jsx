@@ -57,7 +57,7 @@ export default function Karigars() {
         <>
           {/* Desktop table */}
           <div className="hidden overflow-x-auto rounded-xl border border-gray-200 bg-white lg:block">
-            <table className="min-w-full divide-y divide-gray-200 text-sm">
+            <table className="min-w-full divide-y divide-gray-200 whitespace-nowrap text-sm">
               <thead className="bg-gray-50 text-left text-xs uppercase text-gray-500">
                 <tr>
                   <th className="px-4 py-3">Name</th>

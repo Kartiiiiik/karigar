@@ -79,7 +79,7 @@ export function Modal({ open, onClose, title, children, wide }) {
 }
 
 // Shared sticky-header cell classes for the scrollable ledger tables.
-export const STICKY_TH = "sticky top-0 z-20 h-10 border-b border-gray-200 bg-gray-50 px-3 py-2 text-left";
+export const STICKY_TH = "sticky top-0 z-20 h-10 whitespace-nowrap border-b border-gray-200 bg-gray-50 px-3 py-2 text-left";
 
 /** Clickable, sticky table header that toggles asc/desc for `field`. */
 export function SortableTh({ label, field, ordering, onSort }) {

@@ -107,9 +107,9 @@ function Entries({ isStaff }) {
 
   // Sticky-cell class strings + summary-row cell arrays (aligned to columns:
   // Date, Karigar, Gross, Carat, Net Dr, Net Cr, Ornament, Order, [action]).
-  const openTd = "sticky top-10 z-10 h-10 border-b border-amber-200 bg-amber-50 px-3 font-semibold text-gray-800";
-  const bodyTd = "border-b border-gray-100 px-3 py-2.5";
-  const footTd = "sticky z-20 h-10 border-t border-amber-200 bg-amber-50 px-3 font-semibold text-gray-800";
+  const openTd = "sticky top-10 z-10 h-10 whitespace-nowrap border-b border-amber-200 bg-amber-50 px-3 font-semibold text-gray-800";
+  const bodyTd = "whitespace-nowrap border-b border-gray-100 px-3 py-2.5";
+  const footTd = "sticky z-20 h-10 whitespace-nowrap border-t border-amber-200 bg-amber-50 px-3 font-semibold text-gray-800";
   const totalBottom = selected ? "bottom-10" : "bottom-0";
   const act = isStaff ? [""] : [];
   const openingCells = ["Opening", selected?.full_name ?? "", "", "",
@@ -498,7 +498,7 @@ function Orders({ isStaff }) {
         <EmptyState message="No orders." />
       ) : (
         <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
-          <table className="min-w-full divide-y divide-gray-200 text-sm">
+          <table className="min-w-full divide-y divide-gray-200 whitespace-nowrap text-sm">
             <thead className="bg-gray-50 text-left text-xs uppercase text-gray-500">
               <tr>
                 <th className="px-3 py-3">Order no.</th>

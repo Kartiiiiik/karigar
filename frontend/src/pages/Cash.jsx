@@ -65,9 +65,9 @@ export default function Cash() {
   const cashClosing = selected ? Number(selected.cash_balance) : sumDr - sumCr;
 
   // Sticky-cell classes + summary rows (cols: Date, Karigar, Debit, Credit, Remarks, [action]).
-  const openTd = "sticky top-10 z-10 h-10 border-b border-amber-200 bg-amber-50 px-3 font-semibold text-gray-800";
-  const bodyTd = "border-b border-gray-100 px-3 py-2.5";
-  const footTd = "sticky z-20 h-10 border-t border-amber-200 bg-amber-50 px-3 font-semibold text-gray-800";
+  const openTd = "sticky top-10 z-10 h-10 whitespace-nowrap border-b border-amber-200 bg-amber-50 px-3 font-semibold text-gray-800";
+  const bodyTd = "whitespace-nowrap border-b border-gray-100 px-3 py-2.5";
+  const footTd = "sticky z-20 h-10 whitespace-nowrap border-t border-amber-200 bg-amber-50 px-3 font-semibold text-gray-800";
   const totalBottom = selected ? "bottom-10" : "bottom-0";
   const act = isStaff ? [""] : [];
   const openingCells = ["Opening", selected?.full_name ?? "",

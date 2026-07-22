@@ -1,0 +1,46 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    @page { size: A4 landscape; margin: 1.5cm; }
+    body { font-family: "DejaVu Sans", sans-serif; color: #111; font-size: 10px; }
+    h1 { font-size: 16px; margin: 0; color: #b45309; }
+    .subtitle { color: #666; font-style: italic; margin: 2px 0 12px; font-size: 10px; }
+    table { width: 100%; border-collapse: collapse; }
+    th { background: #b45309; color: #fff; padding: 6px; text-align: left; font-size: 9px; }
+    td { padding: 5px 6px; border-bottom: 1px solid #eee; }
+    tr:nth-child(even) td { background: #fafafa; }
+    .dr { color: #b45309; }
+    .cr { color: #15803d; }
+    tr.opening td { background: #fef3c7; font-weight: bold; }
+    tr.total td { background: #fef3c7; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>{{ report.shop.name }} — {{ report.title }}</h1>
+  <div class="subtitle">{{ subtitle }}</div>
+
+  <table>
+    <thead>
+      <tr>{% for col in report.columns %}<th>{{ col }}</th>{% endfor %}</tr>
+    </thead>
+    <tbody>
+      {% if report.opening_row %}
+      <tr class="opening">{% for cell in report.opening_row %}<td>{{ cell }}</td>{% endfor %}</tr>
+      {% endif %}
+      {% for row in report.rows %}
+      <tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>
+      {% empty %}
+      <tr><td colspan="{{ report.columns|length }}" style="text-align:center;color:#999;">No entries in this range.</td></tr>
+      {% endfor %}
+      {% if report.total_row %}
+      <tr class="total">{% for cell in report.total_row %}<td>{{ cell }}</td>{% endfor %}</tr>
+      {% endif %}
+      {% if report.closing_row %}
+      <tr class="total">{% for cell in report.closing_row %}<td>{{ cell }}</td>{% endfor %}</tr>
+      {% endif %}
+    </tbody>
+  </table>
+</body>
+</html>

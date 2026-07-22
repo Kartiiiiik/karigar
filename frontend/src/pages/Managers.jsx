@@ -3,7 +3,7 @@ import { useForm } from "react-hook-form";
 import { Plus, UserX, UserCheck } from "lucide-react";
 import api, { apiError } from "../lib/api";
 import { useFetch } from "../hooks/useFetch";
-import { PageHeader, Spinner, EmptyState, ErrorState, Modal, Field, Badge } from "../components/ui";
+import { PageHeader, Spinner, EmptyState, ErrorState, Modal, Field, Badge, STICKY_TH } from "../components/ui";
 
 export default function Managers() {
   const { data, loading, error, refresh } = useFetch("/auth/managers/", { page_size: 200 });
@@ -20,8 +20,10 @@ export default function Managers() {
     }
   };
 
+  const bodyTd = "whitespace-nowrap border-b border-gray-100 px-3 py-2.5";
+
   return (
-    <div>
+    <div className="flex h-full flex-col">
       <PageHeader
         title="Managers"
         subtitle="Manager accounts can run the shop but cannot manage other managers."
@@ -38,21 +40,35 @@ export default function Managers() {
       ) : items.length === 0 ? (
         <EmptyState message="No managers yet." />
       ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          {items.map((m) => (
-            <div key={m.id} className="card flex items-center justify-between">
-              <div>
-                <p className="font-medium text-gray-900">{m.full_name || m.username}</p>
-                <p className="text-xs text-gray-400">@{m.username}{m.email ? ` · ${m.email}` : ""}</p>
-                <div className="mt-2">
-                  {m.is_active ? <Badge tone="green">Active</Badge> : <Badge tone="red">Inactive</Badge>}
-                </div>
-              </div>
-              <button className="btn-secondary" onClick={() => toggle(m)}>
-                {m.is_active ? <><UserX size={15} /> Deactivate</> : <><UserCheck size={15} /> Activate</>}
-              </button>
-            </div>
-          ))}
+        <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-gray-200 bg-white">
+          <table className="min-w-full border-separate border-spacing-0 text-sm">
+            <thead className="text-left text-xs uppercase text-gray-500">
+              <tr>
+                <th className={STICKY_TH}>Name</th>
+                <th className={STICKY_TH}>Username</th>
+                <th className={STICKY_TH}>Email</th>
+                <th className={STICKY_TH}>Status</th>
+                <th className={STICKY_TH}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((m) => (
+                <tr key={m.id} className="hover:bg-gray-50">
+                  <td className={`${bodyTd} font-medium text-gray-900`}>{m.full_name || m.username}</td>
+                  <td className={`${bodyTd} text-gray-600`}>@{m.username}</td>
+                  <td className={`${bodyTd} text-gray-600`}>{m.email || "—"}</td>
+                  <td className={bodyTd}>
+                    {m.is_active ? <Badge tone="green">Active</Badge> : <Badge tone="red">Inactive</Badge>}
+                  </td>
+                  <td className={`${bodyTd} text-right`}>
+                    <button className="btn-secondary py-1" onClick={() => toggle(m)}>
+                      {m.is_active ? <><UserX size={15} /> Deactivate</> : <><UserCheck size={15} /> Activate</>}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 

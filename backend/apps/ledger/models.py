@@ -17,7 +17,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from django.conf import settings
 from django.core.validators import MinValueValidator
 from django.db import models
-from django.db.models import Case, DecimalField, F, Sum, Value, When
+from django.db.models import Case, DecimalField, F, OuterRef, Subquery, Sum, Value, When
 from django.db.models.functions import Coalesce, Lower
 from simple_history.models import HistoricalRecords
 
@@ -67,6 +67,49 @@ class Ornament(TimeStampedModel):
         return self.name
 
 
+def _signed_movement_subquery(model, amount_field, decimal_places):
+    """Subquery: signed sum of `amount_field` for the OuterRef karigar
+    (Dr positive, Cr negative). Used to annotate balances without an aggregate
+    query per row (avoids N+1)."""
+    dec = DecimalField(max_digits=18, decimal_places=decimal_places)
+    return (
+        model.objects.filter(karigar=OuterRef("pk"))
+        .values("karigar")
+        .annotate(
+            s=Coalesce(
+                Sum(
+                    Case(
+                        When(direction=Direction.DR, then=F(amount_field)),
+                        default=-F(amount_field),
+                        output_field=dec,
+                    )
+                ),
+                Value(Decimal("0")),
+                output_field=dec,
+            )
+        )
+        .values("s")
+    )
+
+
+class KarigarQuerySet(models.QuerySet):
+    def with_balances(self):
+        """Annotate `_gold_mov` / `_cash_mov` (signed entry movement) so the
+        API can compute balances = opening + movement in one query."""
+        dg = DecimalField(max_digits=18, decimal_places=3)
+        dc = DecimalField(max_digits=18, decimal_places=2)
+        return self.annotate(
+            _gold_mov=Coalesce(
+                Subquery(_signed_movement_subquery(GoldEntry, "net_weight_g", 3), output_field=dg),
+                Value(Decimal("0")), output_field=dg,
+            ),
+            _cash_mov=Coalesce(
+                Subquery(_signed_movement_subquery(CashEntry, "amount_npr", 2), output_field=dc),
+                Value(Decimal("0")), output_field=dc,
+            ),
+        )
+
+
 class KarigarProfile(AuthoredModel):
     """Extends a karigar ``User`` with shop-facing details and opening balances.
 
@@ -74,6 +117,8 @@ class KarigarProfile(AuthoredModel):
     the shop's gold/cash), negative = opening Cr (shop owes the karigar). They
     seed the running ledgers.
     """
+
+    objects = KarigarQuerySet.as_manager()
 
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="karigar_profile"
@@ -139,12 +184,41 @@ class KarigarProfile(AuthoredModel):
         return self.opening_cash_npr + agg["total"]
 
 
+def _order_dir_sum_subquery(direction):
+    dec = DecimalField(max_digits=18, decimal_places=3)
+    return (
+        GoldEntry.objects.filter(order=OuterRef("pk"), direction=direction)
+        .values("order")
+        .annotate(t=Coalesce(Sum("net_weight_g"), Value(Decimal("0")), output_field=dec))
+        .values("t")
+    )
+
+
+class OrderQuerySet(models.QuerySet):
+    def with_totals(self):
+        """Annotate `_net_issued` / `_net_received` so per-order wastage doesn't
+        run aggregate queries per row (avoids N+1)."""
+        dec = DecimalField(max_digits=18, decimal_places=3)
+        return self.annotate(
+            _net_issued=Coalesce(
+                Subquery(_order_dir_sum_subquery(Direction.DR), output_field=dec),
+                Value(Decimal("0")), output_field=dec,
+            ),
+            _net_received=Coalesce(
+                Subquery(_order_dir_sum_subquery(Direction.CR), output_field=dec),
+                Value(Decimal("0")), output_field=dec,
+            ),
+        )
+
+
 class Order(AuthoredModel):
     """A (usually numbered) job: gold issued to a karigar to make an ornament.
 
     ``order_number`` is entered manually, is optional, and is NOT unique —
     entries may share or omit it. It is indexed for search.
     """
+
+    objects = OrderQuerySet.as_manager()
 
     class Status(models.TextChoices):
         OPEN = "open", "Open"

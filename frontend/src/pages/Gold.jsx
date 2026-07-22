@@ -201,8 +201,8 @@ function Entries({ isStaff }) {
                   <td className={bodyTd}>{e.karigar_name}</td>
                   <td className={bodyTd}>{formatGramsValue(e.gross_weight_g)}</td>
                   <td className={bodyTd}>{e.carat}kt</td>
-                  <td className={`${bodyTd} font-medium text-amber-700`}>{e.direction === "dr" ? formatGramsValue(e.net_weight_g) : ""}</td>
-                  <td className={`${bodyTd} font-medium text-green-700`}>{e.direction === "cr" ? formatGramsValue(e.net_weight_g) : ""}</td>
+                  <td className={`${bodyTd} font-medium text-dr`}>{e.direction === "dr" ? formatGramsValue(e.net_weight_g) : ""}</td>
+                  <td className={`${bodyTd} font-medium text-cr`}>{e.direction === "cr" ? formatGramsValue(e.net_weight_g) : ""}</td>
                   <td className={`${bodyTd} text-gray-600`}>{e.ornament_name || "—"}</td>
                   <td className={`${bodyTd} text-gray-600`}>{e.order || "—"}</td>
                   {isStaff && (

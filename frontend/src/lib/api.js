@@ -1,10 +1,15 @@
 import axios from "axios";
 import { useAuthStore } from "../store/auth";
 
-// Single axios instance for the whole app. Base URL is /api/v1 which Vite
-// proxies to Django in dev and nginx proxies in prod.
+// Single source of truth for the API base. Overridable at build time via
+// VITE_API_BASE; defaults to the same-origin path proxied by Vite (dev) and
+// nginx (prod). No API host/path is hardcoded elsewhere in the app.
+export const API_BASE = import.meta.env.VITE_API_BASE || "/api/v1";
+const REFRESH_URL = `${API_BASE}/auth/refresh/`;
+
+// Single axios instance for the whole app.
 const api = axios.create({
-  baseURL: "/api/v1",
+  baseURL: API_BASE,
   headers: { "Content-Type": "application/json" },
 });
 
@@ -39,9 +44,7 @@ api.interceptors.response.use(
         return Promise.reject(error);
       }
       try {
-        refreshing =
-          refreshing ||
-          axios.post("/api/v1/auth/refresh/", { refresh });
+        refreshing = refreshing || axios.post(REFRESH_URL, { refresh });
         const { data } = await refreshing;
         refreshing = null;
         setTokens({ access: data.access, refresh: data.refresh ?? refresh });

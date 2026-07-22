@@ -154,8 +154,8 @@ export default function Cash() {
                 <tr key={e.id} className="hover:bg-gray-50">
                   <td className={`${bodyTd} whitespace-nowrap text-gray-600`}>{formatDate(e.entry_date, calendar, { format: dateFormat })}</td>
                   <td className={bodyTd}>{e.karigar_name}</td>
-                  <td className={`${bodyTd} font-medium text-amber-700`}>{e.direction === "dr" ? formatAmount(e.amount_npr) : ""}</td>
-                  <td className={`${bodyTd} font-medium text-green-700`}>{e.direction === "cr" ? formatAmount(e.amount_npr) : ""}</td>
+                  <td className={`${bodyTd} font-medium text-dr`}>{e.direction === "dr" ? formatAmount(e.amount_npr) : ""}</td>
+                  <td className={`${bodyTd} font-medium text-cr`}>{e.direction === "cr" ? formatAmount(e.amount_npr) : ""}</td>
                   <td className={`${bodyTd} text-gray-500`}>{e.remarks || "—"}</td>
                   {isStaff && (
                     <td className={`${bodyTd} text-right`}>

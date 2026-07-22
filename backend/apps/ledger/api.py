@@ -232,7 +232,7 @@ def _get_or_404(model, request, pk):
 @paginate(DefaultPagination)
 def list_karigars(request, search: str | None = None):
     require_staff(request)
-    qs = KarigarProfile.objects.select_related("user").filter(shop=_shop(request))
+    qs = KarigarProfile.objects.select_related("user").with_balances().filter(shop=_shop(request))
     if search:
         qs = qs.filter(full_name__icontains=search)
     return qs
@@ -374,7 +374,7 @@ def my_profile(request):
 @paginate(DefaultPagination)
 def list_orders(request, karigar: int | None = None, status: str | None = None,
                 order_number: str | None = None, ornament: int | None = None):
-    qs = _scope(request, Order.objects.select_related("karigar", "ornament"))
+    qs = _scope(request, Order.objects.select_related("karigar", "ornament").with_totals())
     if karigar:
         qs = qs.filter(karigar_id=karigar)
     if status:

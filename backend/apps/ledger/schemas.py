@@ -67,10 +67,16 @@ class KarigarOut(Schema):
 
     @staticmethod
     def resolve_gold_balance(obj):
+        mov = getattr(obj, "_gold_mov", None)  # from KarigarQuerySet.with_balances()
+        if mov is not None:
+            return str(obj.opening_gold_g + mov)
         return str(obj.gold_balance())
 
     @staticmethod
     def resolve_cash_balance(obj):
+        mov = getattr(obj, "_cash_mov", None)
+        if mov is not None:
+            return str(obj.opening_cash_npr + mov)
         return str(obj.cash_balance())
 
 
@@ -166,14 +172,20 @@ class OrderOut(Schema):
 
     @staticmethod
     def resolve_net_issued(obj):
-        return str(obj.net_issued())
+        v = getattr(obj, "_net_issued", None)  # from OrderQuerySet.with_totals()
+        return str(v if v is not None else obj.net_issued())
 
     @staticmethod
     def resolve_net_received(obj):
-        return str(obj.net_received())
+        v = getattr(obj, "_net_received", None)
+        return str(v if v is not None else obj.net_received())
 
     @staticmethod
     def resolve_wastage(obj):
+        issued = getattr(obj, "_net_issued", None)
+        received = getattr(obj, "_net_received", None)
+        if issued is not None and received is not None:
+            return str(issued - received)
         return str(obj.wastage())
 
 

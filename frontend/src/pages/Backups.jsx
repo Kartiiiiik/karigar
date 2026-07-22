@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import {
-  DatabaseBackup, Play, ShieldAlert, RefreshCw, Upload, RotateCcw,
+  Play, ShieldAlert, RefreshCw, Upload, RotateCcw,
   HardDrive, Usb, CheckCircle2, XCircle,
 } from "lucide-react";
 import api, { apiError } from "../lib/api";
@@ -36,6 +36,7 @@ export default function Backups() {
   const [msg, setMsg] = useState("");
   const [error, setError] = useState("");
   const [restoreTarget, setRestoreTarget] = useState(null);
+  const [tab, setTab] = useState("backups");
   const fileRef = useRef(null);
 
   const refreshAll = () => { list.refresh(); config.refresh(); };
@@ -71,10 +72,10 @@ export default function Backups() {
   const items = list.data ?? [];
 
   return (
-    <div className="max-w-4xl space-y-6">
+    <div className="flex h-full max-w-4xl flex-col gap-4">
       <PageHeader
         title="Backups"
-        subtitle="Encrypted backups written to storage that survives Docker/DB loss."
+        subtitle="Encrypted backups on storage that survives Docker/DB loss."
         actions={
           <div className="flex gap-2">
             <button className="btn-secondary" disabled={busy === "upload"} onClick={() => fileRef.current?.click()}>
@@ -88,76 +89,79 @@ export default function Backups() {
         }
       />
 
-      <div className="flex items-start gap-2 rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800">
-        <ShieldAlert size={18} className="mt-0.5 shrink-0" />
-        <span>
-          Backups are AES-encrypted with a master key held in the server
-          environment — the key is never stored in the database or emailed.
-          Keep it in your secrets manager; without it, backups cannot be restored.
-        </span>
-      </div>
-
       {msg && <p className="text-sm text-green-600">{msg}</p>}
       {error && <ErrorState message={error} />}
 
       {/* Destinations + schedule */}
       {config.loading ? <Spinner /> : config.data && <ConfigForm data={config.data} onSaved={config.refresh} />}
 
-      {/* Recent backups (from storage manifests) */}
-      <div className="card">
-        <h2 className="mb-3 flex items-center gap-2 font-semibold text-gray-900">
-          <DatabaseBackup size={18} /> Recent backups
-        </h2>
-        {list.error && <ErrorState message={list.error} />}
-        {list.loading ? (
-          <Spinner />
-        ) : items.length === 0 ? (
-          <EmptyState message="No backups found at the destinations yet." />
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full whitespace-nowrap text-sm">
-              <thead className="text-left text-xs uppercase text-gray-400">
-                <tr>
-                  <th className="py-2 pr-3">When</th>
-                  <th className="py-2 pr-3">Source</th>
-                  <th className="py-2 pr-3">Size</th>
-                  <th className="py-2 pr-3">Destinations</th>
-                  <th className="py-2 pr-3">Checksum</th>
-                  {isOwner && <th className="py-2"></th>}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {items.map((b) => (
-                  <tr key={b.filename}>
-                    <td className="py-2 pr-3">{formatDate(b.timestamp, calendar, { format: dateFormat, withTime: true })}</td>
-                    <td className="py-2 pr-3">
-                      <Badge tone={SOURCE_TONE[b.source] || "gray"}>{b.source.replace(/_/g, " ")}</Badge>
-                    </td>
-                    <td className="py-2 pr-3">{humanSize(b.size)}</td>
-                    <td className="py-2 pr-3">
-                      <span className="flex items-center gap-3">
-                        <DestBadge ok={b.destinations?.primary} icon={HardDrive} label="Disk" />
-                        <DestBadge ok={b.destinations?.secondary} icon={Usb} label="Drive"
-                          reason={b.destinations?.secondary_reason} />
-                      </span>
-                    </td>
-                    <td className="py-2 pr-3 font-mono text-xs text-gray-400">{(b.checksum_sha256 || "").slice(0, 10)}…</td>
-                    {isOwner && (
-                      <td className="py-2 text-right">
-                        <button className="btn-secondary py-1" onClick={() => setRestoreTarget(b)}>
-                          <RotateCcw size={14} /> Restore
-                        </button>
-                      </td>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+      {/* Backups / restore history as tabs to save vertical space */}
+      <div className="card flex min-h-0 flex-1 flex-col">
+        <div className="mb-3 flex shrink-0 gap-2 border-b border-gray-200">
+          {[["backups", "Recent backups"], ["restores", "Restore history"]].map(([k, label]) => (
+            <button
+              key={k}
+              onClick={() => setTab(k)}
+              className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium ${
+                tab === k ? "border-brand-600 text-brand-700" : "border-transparent text-gray-500"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
 
-      <RestoreAudits />
+        <div className="min-h-0 flex-1">
+        {tab === "backups" ? (
+          list.error ? <ErrorState message={list.error} /> :
+          list.loading ? <Spinner /> :
+          items.length === 0 ? <EmptyState message="No backups found at the destinations yet." /> : (
+            <div className="h-full overflow-auto">
+              <table className="min-w-full whitespace-nowrap text-sm">
+                <thead className="sticky top-0 bg-white text-left text-xs uppercase text-gray-400">
+                  <tr>
+                    <th className="py-2 pr-3">When</th>
+                    <th className="py-2 pr-3">Source</th>
+                    <th className="py-2 pr-3">Size</th>
+                    <th className="py-2 pr-3">Destinations</th>
+                    <th className="py-2 pr-3">Checksum</th>
+                    {isOwner && <th className="py-2"></th>}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {items.map((b) => (
+                    <tr key={b.filename}>
+                      <td className="py-2 pr-3">{formatDate(b.timestamp, calendar, { format: dateFormat, withTime: true })}</td>
+                      <td className="py-2 pr-3">
+                        <Badge tone={SOURCE_TONE[b.source] || "gray"}>{b.source.replace(/_/g, " ")}</Badge>
+                      </td>
+                      <td className="py-2 pr-3">{humanSize(b.size)}</td>
+                      <td className="py-2 pr-3">
+                        <span className="flex items-center gap-3">
+                          <DestBadge ok={b.destinations?.primary} icon={HardDrive} label="Disk" />
+                          <DestBadge ok={b.destinations?.secondary} icon={Usb} label="Drive"
+                            reason={b.destinations?.secondary_reason} />
+                        </span>
+                      </td>
+                      <td className="py-2 pr-3 font-mono text-xs text-gray-400">{(b.checksum_sha256 || "").slice(0, 10)}…</td>
+                      {isOwner && (
+                        <td className="py-2 text-right">
+                          <button className="btn-secondary py-1" onClick={() => setRestoreTarget(b)}>
+                            <RotateCcw size={14} /> Restore
+                          </button>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )
+        ) : (
+          <RestoreAudits />
+        )}
+        </div>
+      </div>
 
       {restoreTarget && (
         <RestoreModal
@@ -249,10 +253,9 @@ function RestoreAudits() {
   const calendar = useSettingsStore((s) => s.calendar);
   const dateFormat = useSettingsStore((s) => s.dateFormat);
   const audits = data ?? [];
-  if (audits.length === 0) return null;
+  if (audits.length === 0) return <EmptyState message="No restores yet." />;
   return (
-    <div className="card">
-      <h2 className="mb-3 font-semibold text-gray-900">Restore history</h2>
+    <div className="h-full overflow-auto">
       <ul className="divide-y divide-gray-100 text-sm">
         {audits.map((a) => (
           <li key={a.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
@@ -310,7 +313,7 @@ function RestoreModal({ backup, calendar, dateFormat, onClose, onDone }) {
         </Field>
         <div className="flex justify-end gap-2">
           <button className="btn-secondary" onClick={onClose} disabled={busy}>Cancel</button>
-          <button className="btn-primary bg-red-600 hover:bg-red-700" disabled={!ready || busy} onClick={submit}>
+          <button className="btn-danger" disabled={!ready || busy} onClick={submit}>
             {busy ? <RefreshCw size={16} className="animate-spin" /> : <RotateCcw size={16} />} Restore now
           </button>
         </div>

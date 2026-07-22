@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
-import { Calendar, Check, CalendarClock } from "lucide-react";
+import { Calendar, Check } from "lucide-react";
 import api, { apiError } from "../lib/api";
 import { PageHeader, ErrorState, Field } from "../components/ui";
 import { useSettingsStore } from "../store/settings";
@@ -46,58 +46,51 @@ export default function Settings() {
     <div className="max-w-2xl space-y-6">
       <PageHeader title="Settings" subtitle="Shop-wide preferences." />
 
-      <div className="card space-y-3">
+      {/* Display: calendar + date format in one card */}
+      <div className="card space-y-4">
         <h2 className="flex items-center gap-2 font-semibold text-gray-900">
-          <Calendar size={18} /> Calendar
+          <Calendar size={18} /> Display
         </h2>
-        <p className="text-sm text-gray-500">
-          Controls how dates are displayed across the app and in reports. Data is
-          always stored in AD (Gregorian); this only changes the display.
-        </p>
         {calError && <ErrorState message={calError} />}
-        <div className="flex gap-2">
-          {["BS", "AD"].map((c) => (
-            <button
-              key={c}
-              disabled={saving}
-              onClick={() => changeCalendar(c)}
-              className={`flex-1 rounded-lg border px-4 py-3 text-sm font-medium ${
-                calendar === c ? "border-brand-500 bg-brand-50 text-brand-700" : "border-gray-300 text-gray-600"
-              }`}
-            >
-              {calendar === c && <Check size={14} className="mr-1 inline" />}
-              {c === "BS" ? "Bikram Sambat (BS)" : "Gregorian (AD)"}
-            </button>
-          ))}
-        </div>
-        {savedCal && <p className="text-xs text-green-600">Calendar saved.</p>}
-      </div>
 
-      <div className="card space-y-3">
-        <h2 className="flex items-center gap-2 font-semibold text-gray-900">
-          <CalendarClock size={18} /> Date format
-        </h2>
-        <p className="text-sm text-gray-500">
-          How dates are written wherever they appear ({calendar} calendar).
-        </p>
-        <Field label="Format">
-          <select
-            className="input"
-            value={dateFormat}
-            disabled={saving}
-            onChange={(e) => changeDateFormat(e.target.value)}
-          >
-            {DATE_FORMATS.map((f) => (
-              <option key={f.value} value={f.value}>{f.label}</option>
-            ))}
-          </select>
-        </Field>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <p className="label">Calendar {savedCal && <span className="text-green-600">· saved</span>}</p>
+            <div className="flex gap-2">
+              {["BS", "AD"].map((c) => (
+                <button
+                  key={c}
+                  disabled={saving}
+                  onClick={() => changeCalendar(c)}
+                  className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium ${
+                    calendar === c ? "border-brand-500 bg-brand-50 text-brand-700" : "border-gray-300 text-gray-600"
+                  }`}
+                >
+                  {calendar === c && <Check size={14} className="mr-1 inline" />}
+                  {c}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <p className="label">Date format {savedFmt && <span className="text-green-600">· saved</span>}</p>
+            <select
+              className="input"
+              value={dateFormat}
+              disabled={saving}
+              onChange={(e) => changeDateFormat(e.target.value)}
+            >
+              {DATE_FORMATS.map((f) => (
+                <option key={f.value} value={f.value}>{f.label}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
         <p className="text-xs text-gray-400">
-          Today shows as:{" "}
-          <span className="font-medium text-gray-600">
-            {formatDate(today, calendar, { format: dateFormat })}
-          </span>
-          {savedFmt && <span className="ml-2 text-green-600">Saved</span>}
+          Dates are stored in AD; this only changes the display. Today shows as{" "}
+          <span className="font-medium text-gray-600">{formatDate(today, calendar, { format: dateFormat })}</span>.
         </p>
       </div>
 

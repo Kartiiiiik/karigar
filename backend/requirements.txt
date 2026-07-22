@@ -25,8 +25,8 @@ boto3==1.35.90
 openpyxl==3.1.5
 weasyprint==63.1
 
-# ---- Backups (AES-encrypted zip) ----
-pyzipper==0.3.6
+# ---- Backups ----
+cryptography==49.0.0   # Fernet encryption of backup archives
 
 # ---- Nepali (BS) date conversion ----
 nepali-datetime==1.0.8.2

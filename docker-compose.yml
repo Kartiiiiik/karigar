@@ -10,7 +10,7 @@
 # ===========================================================================
 services:
   db:
-    image: postgres:16-alpine
+    image: postgres:17-alpine  # match the pg_dump/pg_restore client major (17)
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-karigar}
@@ -41,9 +41,14 @@ services:
       DJANGO_SETTINGS_MODULE: config.settings.prod
       DATABASE_URL: postgres://${POSTGRES_USER:-karigar}:${POSTGRES_PASSWORD:-karigar}@db:5432/${POSTGRES_DB:-karigar}
       RUN_MIGRATIONS: "1"
+      BACKUP_PRIMARY_PATH: /app/backups
     volumes:
       - media:/app/media
       - static:/app/staticfiles
+      # Backup destination is a BIND MOUNT (plain host folder), NOT a Docker
+      # named volume — so `docker volume rm` / prune never touches backups.
+      # Point BACKUP_PRIMARY_HOST at e.g. D:/SecureBackups in .env for real use.
+      - ${BACKUP_PRIMARY_HOST:-./secure-backups}:/app/backups
     depends_on:
       db:
         condition: service_healthy
@@ -64,6 +69,9 @@ services:
       DJANGO_SETTINGS_MODULE: config.settings.prod
       DATABASE_URL: postgres://${POSTGRES_USER:-karigar}:${POSTGRES_PASSWORD:-karigar}@db:5432/${POSTGRES_DB:-karigar}
       RUN_MIGRATIONS: "0"
+      BACKUP_PRIMARY_PATH: /app/backups
+    volumes:
+      - ${BACKUP_PRIMARY_HOST:-./secure-backups}:/app/backups
     depends_on:
       - backend
       - redis

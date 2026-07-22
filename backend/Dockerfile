@@ -33,11 +33,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     DJANGO_SETTINGS_MODULE=config.settings.prod
 
 # Runtime libraries:
-#   libpq5           -> psycopg
-#   libpango/cairo/… -> WeasyPrint PDF rendering
-#   fonts            -> legible PDFs
+#   postgresql-client   -> pg_dump / pg_restore for backups (Debian's client is
+#                          >= the Postgres 16 server, which pg_dump supports)
+#   libpango/cairo/…    -> WeasyPrint PDF rendering
+#   fonts               -> legible PDFs
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpq5 \
+    postgresql-client \
     libpango-1.0-0 \
     libpangocairo-1.0-0 \
     libcairo2 \
@@ -55,8 +56,8 @@ COPY --chown=appuser:appuser . /app
 # Create the media/static mount points owned by appuser so the named volumes
 # mounted here initialise with writable (non-root) ownership.
 RUN chmod +x /app/entrypoint.sh \
-    && mkdir -p /app/staticfiles /app/media \
-    && chown -R appuser:appuser /app/staticfiles /app/media
+    && mkdir -p /app/staticfiles /app/media /app/backups \
+    && chown -R appuser:appuser /app/staticfiles /app/media /app/backups
 USER appuser
 
 EXPOSE 8000

@@ -1,14 +1,15 @@
 from django.contrib import admin
 
-from .models import BackupConfig, BackupLog
+from .models import BackupConfig, RestoreAudit
 
 
 @admin.register(BackupConfig)
 class BackupConfigAdmin(admin.ModelAdmin):
-    list_display = ("shop", "frequency", "enabled", "last_run_at")
+    list_display = ("shop", "frequency", "enabled", "primary_path", "secondary_path", "last_run_at")
 
 
-@admin.register(BackupLog)
-class BackupLogAdmin(admin.ModelAdmin):
-    list_display = ("shop", "status", "triggered_by", "created_at", "filename")
-    list_filter = ("status", "triggered_by", "shop")
+@admin.register(RestoreAudit)
+class RestoreAuditAdmin(admin.ModelAdmin):
+    list_display = ("shop", "backup_filename", "status", "performed_by", "created_at")
+    list_filter = ("status", "shop")
+    readonly_fields = ("shop", "performed_by", "backup_filename", "safety_backup_filename", "status", "message")

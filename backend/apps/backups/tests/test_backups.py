@@ -1,20 +1,16 @@
-import datetime
-import io
-
 import pytest
-import pyzipper
-from django.core import mail
-from django.test import override_settings
-from django.utils import timezone
 
-from apps.accounts.models import Role, Shop, User
-from apps.backups.models import BackupConfig, BackupLog
-from apps.backups.services import build_backup_zip, run_backup
-from apps.backups.tasks import _is_due
+from apps.backups import service
+from apps.backups.crypto import decrypt_bytes, encrypt_bytes
+from apps.backups.models import BackupConfig
+
+FAKE_DUMP = b"PGDMP" + b"\x00fake custom-format archive body"
 
 
 @pytest.fixture
 def shop_owner(db):
+    from apps.accounts.models import Role, Shop, User
+
     shop = Shop.objects.create(name="Backup Shop")
     owner = User(username="o", role=Role.OWNER, shop=shop, is_staff=True, is_superuser=True)
     owner.set_password("Karigar@123")
@@ -22,53 +18,85 @@ def shop_owner(db):
     return shop, owner
 
 
-@pytest.mark.django_db
-def test_build_zip_is_aes_encrypted(shop_owner):
-    shop, _ = shop_owner
-    filename, content = build_backup_zip(shop, "secret123")
-    assert filename.endswith(".zip")
-    # Correct password reads the members.
-    with pyzipper.AESZipFile(io.BytesIO(content)) as zf:
-        zf.setpassword(b"secret123")
-        names = zf.namelist()
-        assert "data.json" in names and "gold-ledger.xlsx" in names and "cash-ledger.xlsx" in names
-        assert zf.read("data.json")  # decrypts
-    # Wrong password fails.
-    with pyzipper.AESZipFile(io.BytesIO(content)) as zf:
-        zf.setpassword(b"wrong")
-        with pytest.raises(RuntimeError):
-            zf.read("data.json")
-
-
-@override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
-@pytest.mark.django_db
-def test_run_backup_emails_and_logs(shop_owner):
-    shop, _ = shop_owner
-    BackupConfig.objects.create(shop=shop, recipient_emails="a@b.com", enabled=True)
-    log = run_backup(shop, triggered_by=BackupLog.Trigger.MANUAL)
-    assert log.status == BackupLog.Status.SUCCESS
-    assert len(mail.outbox) == 1
-    assert mail.outbox[0].to == ["a@b.com"]
-    assert mail.outbox[0].attachments  # the zip
-
-
-@pytest.mark.django_db
-def test_run_backup_now_endpoint(api, shop_owner):
+@pytest.fixture
+def configured(shop_owner, tmp_path):
     shop, owner = shop_owner
-    resp = api(owner).post("/api/v1/backups/run/")
-    assert resp.status_code == 200
-    assert BackupLog.objects.filter(shop=shop).exists()
+    primary = tmp_path / "primary"
+    secondary = tmp_path / "secondary"
+    primary.mkdir()
+    # secondary intentionally NOT created -> best-effort skip path exercised.
+    BackupConfig.objects.create(
+        shop=shop, primary_path=str(primary), secondary_path=str(secondary / "missing")
+    )
+    return shop, owner, primary, secondary
+
+
+def test_encrypt_decrypt_roundtrip():
+    token = encrypt_bytes(FAKE_DUMP)
+    assert token != FAKE_DUMP
+    assert decrypt_bytes(token) == FAKE_DUMP
+
+
+def test_pgdump_magic():
+    assert service.looks_like_pgdump(FAKE_DUMP)
+    assert not service.looks_like_pgdump(b"not a dump")
 
 
 @pytest.mark.django_db
-def test_scheduled_due_logic(shop_owner):
-    shop, _ = shop_owner
-    now = timezone.now()
-    weekly = BackupConfig(shop=shop, frequency=BackupConfig.Frequency.WEEKLY, enabled=True, last_run_at=None)
-    assert _is_due(weekly, now) is True
-    weekly.last_run_at = now - datetime.timedelta(days=3)
-    assert _is_due(weekly, now) is False
-    weekly.last_run_at = now - datetime.timedelta(days=8)
-    assert _is_due(weekly, now) is True
-    off = BackupConfig(shop=shop, frequency=BackupConfig.Frequency.OFF, enabled=True)
-    assert _is_due(off, now) is False
+def test_ingest_plain_dump_stores_encrypted_and_lists(configured):
+    shop, owner, primary, secondary = configured
+    manifest = service.ingest_upload(shop, FAKE_DUMP, already_encrypted=False)
+
+    # File on primary is encrypted (not the plaintext) + manifest present.
+    stored = (primary / manifest["filename"]).read_bytes()
+    assert stored != FAKE_DUMP and decrypt_bytes(stored) == FAKE_DUMP
+    assert (primary / (manifest["filename"] + ".manifest.json")).exists()
+
+    # Listing comes from the manifest on disk (not the DB).
+    items = service.list_backups(shop)
+    assert len(items) == 1
+    assert items[0]["source"] == "manual_upload"
+    assert items[0]["destinations"]["primary"] is True
+    assert items[0]["destinations"]["secondary"] is False  # drive not attached
+
+
+@pytest.mark.django_db
+def test_ingest_rejects_non_pgdump(configured):
+    shop, *_ = configured
+    with pytest.raises(RuntimeError):
+        service.ingest_upload(shop, b"garbage file", already_encrypted=False)
+
+
+@pytest.mark.django_db
+def test_upload_endpoint(api, configured):
+    from django.core.files.uploadedfile import SimpleUploadedFile
+
+    shop, owner, primary, _ = configured
+    f = SimpleUploadedFile("db.dump", FAKE_DUMP, content_type="application/octet-stream")
+    resp = api(owner).client.post(
+        "/api/v1/backups/upload/",
+        {"file": f, "encrypted": "false"},
+        **api(owner).headers,
+    )
+    assert resp.status_code == 200, resp.content
+    assert service.list_backups(shop)[0]["source"] == "manual_upload"
+
+
+@pytest.mark.django_db
+def test_restore_guarded(api, configured):
+    shop, owner, *_ = configured
+    from apps.accounts.models import Role, User
+
+    manager = User(username="m", role=Role.MANAGER, shop=shop)
+    manager.set_password("Karigar@123")
+    manager.save()
+
+    # Manager cannot restore.
+    assert api(manager).post("/api/v1/backups/restore/",
+                             {"filename": "x", "confirm": "RESTORE", "password": "Karigar@123"}).status_code == 403
+    # Owner, wrong confirmation phrase.
+    assert api(owner).post("/api/v1/backups/restore/",
+                           {"filename": "x", "confirm": "nope", "password": "Karigar@123"}).status_code == 400
+    # Owner, wrong password (re-auth fails).
+    assert api(owner).post("/api/v1/backups/restore/",
+                           {"filename": "x", "confirm": "RESTORE", "password": "wrong"}).status_code == 403

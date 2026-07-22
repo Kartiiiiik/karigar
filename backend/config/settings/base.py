@@ -214,6 +214,33 @@ DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="no-reply@karigar.local")
 GOLD_PURE_CARAT = 24
 
 # ---------------------------------------------------------------------------
+# Backups (resilient, off-Docker-volume)
+# ---------------------------------------------------------------------------
+# Master key for encrypting backup files (urlsafe base64 Fernet key). MUST come
+# from the environment / a secrets manager — never committed, never emailed,
+# never stored in the DB. A dev fallback is generated so local runs work.
+BACKUP_ENCRYPTION_KEY = env("BACKUP_ENCRYPTION_KEY", default="")
+
+# Default destination paths (bind-mounted host folders — NOT Docker volumes).
+# These are container paths; the frontend lets staff type Windows host paths,
+# which are resolved to container mounts via BACKUP_PATH_MAP below.
+BACKUP_PRIMARY_PATH = env("BACKUP_PRIMARY_PATH", default=str(BASE_DIR / "backups"))
+BACKUP_SECONDARY_PATH = env("BACKUP_SECONDARY_PATH", default="")
+
+# Maps host path prefixes (as staff would type them, e.g. "D:\\SecureBackups")
+# to the container mount point they are bind-mounted at. Lets a Windows-style
+# path entered in the UI resolve to where the container can actually write.
+# JSON object, e.g. {"D:\\\\SecureBackups": "/app/backups", "E:": "/app/backups-secondary"}
+BACKUP_PATH_MAP = env.json("BACKUP_PATH_MAP", default={})
+
+# App version stamped into each backup manifest (set at deploy time).
+APP_GIT_SHA = env("APP_GIT_SHA", default="dev")
+
+# pg_dump / pg_restore binaries (overridable if not on PATH).
+PG_DUMP_BIN = env("PG_DUMP_BIN", default="pg_dump")
+PG_RESTORE_BIN = env("PG_RESTORE_BIN", default="pg_restore")
+
+# ---------------------------------------------------------------------------
 # Logging (structured, console-based; prod adds handlers)
 # ---------------------------------------------------------------------------
 LOGGING = {

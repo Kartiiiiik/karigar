@@ -1,9 +1,4 @@
-"""Celery tasks for backups.
-
-``run_backup_task`` executes a single shop's backup off the request thread.
-``run_scheduled_backups`` is invoked by Celery Beat and fans out to every shop
-whose config is due, based on weekly/monthly frequency.
-"""
+"""Celery tasks for backups."""
 import logging
 
 from celery import shared_task
@@ -11,19 +6,23 @@ from django.utils import timezone
 
 from apps.accounts.models import Shop
 
-from .models import BackupConfig, BackupLog
-from .services import run_backup
+from . import service
+from .models import BackupConfig
 
 logger = logging.getLogger("apps.backups")
 
 
 @shared_task
-def run_backup_task(shop_id, triggered_by=BackupLog.Trigger.SCHEDULED):
+def run_backup_task(shop_id, source="scheduled"):
     shop = Shop.objects.filter(pk=shop_id).first()
     if not shop:
         return "shop-not-found"
-    log = run_backup(shop, triggered_by=triggered_by)
-    return log.status
+    try:
+        manifest = service.run_backup(shop, source=source)
+        return manifest["filename"]
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Backup failed for shop %s", shop_id)
+        return f"failed: {exc}"
 
 
 def _is_due(config, now):
@@ -31,22 +30,21 @@ def _is_due(config, now):
         return False
     if config.last_run_at is None:
         return True
-    delta = now - config.last_run_at
-    if config.frequency == BackupConfig.Frequency.WEEKLY:
-        return delta.days >= 7
-    if config.frequency == BackupConfig.Frequency.MONTHLY:
-        return delta.days >= 30
-    return False
+    days = (now - config.last_run_at).days
+    return {
+        BackupConfig.Frequency.DAILY: days >= 1,
+        BackupConfig.Frequency.WEEKLY: days >= 7,
+        BackupConfig.Frequency.MONTHLY: days >= 30,
+    }.get(config.frequency, False)
 
 
 @shared_task
 def run_scheduled_backups():
-    """Beat entrypoint: run any config that is due. Runs daily; each config's
-    own frequency gates whether it actually fires."""
+    """Beat entrypoint (runs daily); each config's own frequency gates it."""
     now = timezone.now()
     fired = 0
     for config in BackupConfig.objects.select_related("shop").all():
         if _is_due(config, now):
-            run_backup_task.delay(config.shop_id, BackupLog.Trigger.SCHEDULED)
+            run_backup_task.delay(config.shop_id, "scheduled")
             fired += 1
     return f"queued {fired} backup(s)"

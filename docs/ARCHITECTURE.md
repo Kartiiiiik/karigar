@@ -186,9 +186,12 @@ not parse multipart bodies on PATCH.
 | Method | Path | Auth | Notes |
 |--------|------|------|-------|
 | `GET` | `/reports/gold/` · `/reports/cash/` | staff | `?fmt=json\|excel\|pdf & date_from & date_to & karigar`. Dates render in the shop calendar. |
-| `GET/PATCH` | `/backups/config/` | staff | recipients, frequency (off/weekly/monthly), enabled |
-| `GET` | `/backups/logs/` | staff | Run history (paginated) |
+| `GET/PATCH` | `/backups/config/` | staff | primary/secondary paths, frequency (off/daily/weekly/monthly), enabled |
+| `GET` | `/backups/` | staff | Recent backups — **read from storage manifests, not the DB** |
 | `POST` | `/backups/run/` | staff | Manual backup (Celery, or inline if broker down) |
+| `POST` | `/backups/upload/` | staff | Manual upload of a `.dump`/`.dump.enc` (validated, tagged `manual_upload`) |
+| `GET` | `/backups/audits/` | staff | Restore audit trail |
+| `POST` | `/backups/restore/` | **owner** | Restore — owner-only, re-auth password + typed `RESTORE`, auto safety backup |
 
 ---
 
@@ -226,8 +229,19 @@ The API contract is always AD ISO-8601; BS is presentation only.
   easier as HTML/CSS templates, reusable for on-screen previews.
 - **Scheduler:** Celery + Redis + django-celery-beat; a daily beat task runs any
   backup config that is due (weekly/monthly gate).
-- **Backups:** AES-encrypted zip via `pyzipper` (JSON dump + gold/cash Excel);
-  password emailed in the body with a security caveat.
+- **Backups (resilient):** `pg_dump -Fc` streamed to memory, Fernet-encrypted
+  with a master key from the **env** (never in the DB, never emailed), written
+  to **bind-mounted host folders** (primary disk + best-effort removable drive)
+  — NOT Docker named volumes, so `docker volume rm`/prune can't touch them. Each
+  file gets a `manifest.json` (timestamp, size, SHA-256, app sha, source,
+  destinations). The **Recent backups list reads those manifests from storage**,
+  not the DB, so it survives a full volume/DB wipe. Manual upload validates the
+  pg_dump magic bytes. **Restore** (owner-only, re-auth + typed confirm) always
+  takes a non-skippable `pre_restore_safety` backup first, then `pg_restore
+  --clean --single-transaction` (atomic) over the live DB, and is audited.
+  pg client and server are both major 17 so dumps restore cleanly. The
+  destination layer is a generic contract (`LocalPathDestination`) so a cloud
+  bucket is a drop-in third option later.
 - **Gold math:** `net_weight = gross_weight × (carat / 24)`; 22kt uses 22/24
   exactly. `net_weight_g` is computed and **stored**; editing gross/carat
   recomputes it.

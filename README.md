@@ -27,7 +27,8 @@ Django REST backend in a single monorepo.
 > The API layer uses **Django Ninja** (not DRF). Interactive OpenAPI docs are
 > served at **`/api/v1/docs`** in development.
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the live schema + API reference.
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the live schema + API reference,
+and [docs/BACKUPS.md](docs/BACKUPS.md) for the backup/restore architecture and full flow.
 
 ---
 

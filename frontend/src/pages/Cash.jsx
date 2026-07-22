@@ -82,10 +82,10 @@ export default function Cash() {
     cashClosing >= 0 ? formatAmount(cashClosing) : "", cashClosing < 0 ? formatAmount(-cashClosing) : "", "", ...act];
 
   return (
-    <div>
+    <div className="flex h-full flex-col">
       <PageHeader title="Cash Ledger" subtitle="NPR advances & payments. Dr = given to karigar, Cr = received." />
 
-      <div className="mb-4 space-y-2">
+      <div className="mb-4 shrink-0 space-y-2">
         {isStaff && (
           <div className="flex gap-2">
             <button className="btn-primary flex-1 sm:flex-none" onClick={() => setEntry({ direction: "dr" })}>
@@ -134,7 +134,7 @@ export default function Cash() {
       ) : count === 0 ? (
         <EmptyState message="No cash entries." />
       ) : (
-        <div className="h-[calc(100dvh_-_19rem)] sm:h-[calc(100dvh_-_15rem)] min-h-[300px] overflow-auto rounded-xl border border-gray-200 bg-white">
+        <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-gray-200 bg-white">
           <table className="min-w-full border-separate border-spacing-0 text-sm">
             <thead className="text-left text-xs uppercase text-gray-500">
               <tr>

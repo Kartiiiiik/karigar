@@ -126,8 +126,8 @@ function Entries({ isStaff }) {
     goldClosing >= 0 ? formatGramsValue(goldClosing) : "", goldClosing < 0 ? formatGramsValue(-goldClosing) : "", "", "", ...act];
 
   return (
-    <div>
-      <div className="mb-4 space-y-2">
+    <div className="flex h-full flex-col">
+      <div className="mb-4 shrink-0 space-y-2">
         {isStaff && (
           <div className="flex gap-2">
             <button className="btn-primary flex-1 sm:flex-none" onClick={() => setEntry({ direction: "dr" })}>
@@ -176,7 +176,7 @@ function Entries({ isStaff }) {
       ) : count === 0 ? (
         <EmptyState message="No gold entries." />
       ) : (
-        <div className="h-[calc(100dvh_-_19rem)] sm:h-[calc(100dvh_-_15rem)] min-h-[300px] overflow-auto rounded-xl border border-gray-200 bg-white">
+        <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-gray-200 bg-white">
           <table className="min-w-full border-separate border-spacing-0 text-sm">
             <thead className="text-left text-xs uppercase text-gray-500">
               <tr>
@@ -489,9 +489,9 @@ function Orders({ isStaff }) {
   }, []);
 
   return (
-    <div>
+    <div className="flex h-full flex-col">
       {isStaff && (
-        <div className="mb-4">
+        <div className="mb-4 shrink-0">
           <button className="btn-primary" onClick={() => setEditing({})}>
             <Plus size={16} /> New order
           </button>
@@ -503,7 +503,7 @@ function Orders({ isStaff }) {
       ) : items.length === 0 ? (
         <EmptyState message="No orders." />
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+        <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-gray-200 bg-white">
           <table className="min-w-full divide-y divide-gray-200 whitespace-nowrap text-sm">
             <thead className="bg-gray-50 text-left text-xs uppercase text-gray-500">
               <tr>

@@ -45,10 +45,13 @@ services:
     volumes:
       - media:/app/media
       - static:/app/staticfiles
-      # Backup destination is a BIND MOUNT (plain host folder), NOT a Docker
-      # named volume — so `docker volume rm` / prune never touches backups.
-      # Point BACKUP_PRIMARY_HOST at e.g. D:/SecureBackups in .env for real use.
+      # Default fallback destination (used when the UI path is blank).
       - ${BACKUP_PRIMARY_HOST:-./secure-backups}:/app/backups
+      # Windows C: drive mounted into the container so ANY folder typed in the
+      # Backups UI (e.g. C:\Users\Lenevo\Desktop\secure-backups) is reachable.
+      # BACKUP_PATH_MAP translates "C:" -> "/hostfs/c". These are bind mounts
+      # (real host filesystem), NOT Docker volumes, so prune never touches them.
+      - ${HOSTFS_MOUNT:-C:/}:/hostfs/c
     depends_on:
       db:
         condition: service_healthy
@@ -72,6 +75,7 @@ services:
       BACKUP_PRIMARY_PATH: /app/backups
     volumes:
       - ${BACKUP_PRIMARY_HOST:-./secure-backups}:/app/backups
+      - ${HOSTFS_MOUNT:-C:/}:/hostfs/c
     depends_on:
       - backend
       - redis

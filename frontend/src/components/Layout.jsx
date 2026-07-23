@@ -10,6 +10,7 @@ import {
   UserCog,
   Settings,
   DatabaseBackup,
+  Landmark,
   LogOut,
   Menu,
   X,
@@ -26,6 +27,7 @@ const NAV = [
   { to: "/cash", label: "Cash Ledger", icon: Coins, roles: ["owner", "manager", "karigar"] },
   { to: "/reports", label: "Reports", icon: FileBarChart, roles: ["owner", "manager"] },
   { to: "/managers", label: "Managers", icon: UserCog, roles: ["owner"] },
+  { to: "/bandaki", label: "Bandaki", icon: Landmark, roles: ["owner"] },
   { to: "/settings", label: "Settings", icon: Settings, roles: ["owner", "manager"] },
   { to: "/backups", label: "Backups", icon: DatabaseBackup, roles: ["owner", "manager"] },
 ];

@@ -51,6 +51,7 @@ INSTALLED_APPS = [
     "apps.ledger",
     "apps.reports",
     "apps.backups",
+    "apps.bandaki",
 ]
 
 MIDDLEWARE = [

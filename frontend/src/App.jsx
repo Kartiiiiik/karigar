@@ -11,6 +11,7 @@ import Managers from "./pages/Managers";
 import Settings from "./pages/Settings";
 import Reports from "./pages/Reports";
 import Backups from "./pages/Backups";
+import Bandaki from "./pages/Bandaki";
 import NotFound from "./pages/NotFound";
 
 const STAFF = ["owner", "manager"];
@@ -38,6 +39,7 @@ export default function App() {
         <Route path="cash" element={<Cash />} />
         <Route path="reports" element={<Staff><Reports /></Staff>} />
         <Route path="managers" element={<ProtectedRoute roles={["owner"]}><Managers /></ProtectedRoute>} />
+        <Route path="bandaki" element={<ProtectedRoute roles={["owner"]}><Bandaki /></ProtectedRoute>} />
         <Route path="settings" element={<Staff><Settings /></Staff>} />
         <Route path="backups" element={<Staff><Backups /></Staff>} />
       </Route>

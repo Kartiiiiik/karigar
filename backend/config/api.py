@@ -13,6 +13,7 @@ from ninja.errors import AuthenticationError, HttpError, ValidationError
 
 from apps.accounts.api import router as accounts_router
 from apps.backups.api import router as backups_router
+from apps.bandaki.api import router as bandaki_router
 from apps.common.auth import auth
 from apps.ledger.api import router as ledger_router
 from apps.reports.api import router as reports_router
@@ -26,6 +27,7 @@ api.add_router("/auth", accounts_router)
 api.add_router("", ledger_router)
 api.add_router("", reports_router)
 api.add_router("", backups_router)
+api.add_router("", bandaki_router)
 
 
 def _envelope(message, code, detail=None):

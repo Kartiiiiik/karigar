@@ -18,41 +18,75 @@ import {
 import { useAuthStore } from "../store/auth";
 import { useSettingsStore } from "../store/settings";
 
-// role -> which nav items are visible. Karigars get a stripped-down self view.
-const NAV = [
-  { to: "/", label: "Dashboard", icon: LayoutDashboard, roles: ["owner", "manager", "karigar"], end: true },
-  { to: "/karigars", label: "Karigars", icon: Users, roles: ["owner", "manager"] },
-  { to: "/ornaments", label: "Ornaments", icon: ShoppingBag, roles: ["owner", "manager"] },
-  { to: "/gold", label: "Gold Ledger", icon: Gem, roles: ["owner", "manager", "karigar"] },
-  { to: "/cash", label: "Cash Ledger", icon: Coins, roles: ["owner", "manager", "karigar"] },
-  { to: "/reports", label: "Reports", icon: FileBarChart, roles: ["owner", "manager"] },
-  { to: "/managers", label: "Managers", icon: UserCog, roles: ["owner"] },
-  { to: "/bandaki", label: "Bandaki", icon: Landmark, roles: ["owner"] },
-  { to: "/settings", label: "Settings", icon: Settings, roles: ["owner", "manager"] },
-  { to: "/backups", label: "Backups", icon: DatabaseBackup, roles: ["owner", "manager"] },
+// Nav is organised into labelled groups. `role` controls which items (and, in
+// turn, which whole groups) are visible. Karigars get a stripped-down self view.
+// The first group has no heading (Dashboard sits on its own at the top).
+const NAV_GROUPS = [
+  {
+    items: [
+      { to: "/", label: "Dashboard", icon: LayoutDashboard, roles: ["owner", "manager", "karigar"], end: true },
+    ],
+  },
+  {
+    label: "Ledgers & Reports",
+    items: [
+      { to: "/gold", label: "Gold Ledger", icon: Gem, roles: ["owner", "manager", "karigar"] },
+      { to: "/cash", label: "Cash Ledger", icon: Coins, roles: ["owner", "manager", "karigar"] },
+      { to: "/bandaki", label: "Bandaki Ledger", icon: Landmark, roles: ["owner"] },
+      { to: "/reports", label: "Reports", icon: FileBarChart, roles: ["owner", "manager"] },
+    ],
+  },
+  {
+    label: "Management",
+    items: [
+      { to: "/karigars", label: "Karigars", icon: Users, roles: ["owner", "manager"] },
+      { to: "/ornaments", label: "Ornaments", icon: ShoppingBag, roles: ["owner", "manager"] },
+      { to: "/managers", label: "Managers", icon: UserCog, roles: ["owner"] },
+    ],
+  },
+  {
+    label: "System",
+    items: [
+      { to: "/settings", label: "Settings", icon: Settings, roles: ["owner", "manager"] },
+      { to: "/backups", label: "Backups", icon: DatabaseBackup, roles: ["owner", "manager"] },
+    ],
+  },
 ];
 
 function NavItems({ role, onNavigate }) {
   return (
     <nav className="flex flex-col gap-1">
-      {NAV.filter((item) => item.roles.includes(role)).map((item) => (
-        <NavLink
-          key={item.to}
-          to={item.to}
-          end={item.end}
-          onClick={onNavigate}
-          className={({ isActive }) =>
-            `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition ${
-              isActive
-                ? "bg-brand-50 text-brand-700"
-                : "text-gray-600 hover:bg-gray-100"
-            }`
-          }
-        >
-          <item.icon size={18} />
-          {item.label}
-        </NavLink>
-      ))}
+      {NAV_GROUPS.map((group, gi) => {
+        const items = group.items.filter((item) => item.roles.includes(role));
+        if (items.length === 0) return null; // hide empty groups for this role
+        return (
+          <div key={group.label ?? gi} className={gi > 0 ? "mt-4" : ""}>
+            {group.label && (
+              <p className="px-3 pb-1 text-xs font-semibold uppercase tracking-wide text-gray-400">
+                {group.label}
+              </p>
+            )}
+            {items.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.end}
+                onClick={onNavigate}
+                className={({ isActive }) =>
+                  `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition ${
+                    isActive
+                      ? "bg-brand-50 text-brand-700"
+                      : "text-gray-600 hover:bg-gray-100"
+                  }`
+                }
+              >
+                <item.icon size={18} />
+                {item.label}
+              </NavLink>
+            ))}
+          </div>
+        );
+      })}
     </nav>
   );
 }

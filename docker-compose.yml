@@ -43,7 +43,10 @@ services:
       RUN_MIGRATIONS: "1"
       BACKUP_PRIMARY_PATH: /app/backups
     volumes:
-      - media:/app/media
+      # User-uploaded photos (karigars/, ornaments/). A host bind mount — NOT a
+      # Docker volume — so `docker compose down -v` / `docker volume prune` can
+      # never wipe them. Survives removing/rebuilding the whole stack.
+      - ${MEDIA_HOST:-./media-files}:/app/media
       - static:/app/staticfiles
       # Default fallback destination (used when the UI path is blank).
       - ${BACKUP_PRIMARY_HOST:-./secure-backups}:/app/backups
@@ -103,5 +106,4 @@ services:
 
 volumes:
   pgdata:
-  media:
   static:

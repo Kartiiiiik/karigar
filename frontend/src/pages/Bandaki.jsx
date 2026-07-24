@@ -55,7 +55,7 @@ export default function Bandaki() {
 function Loans() {
   const calendar = useSettingsStore((s) => s.calendar);
   const dateFormat = useSettingsStore((s) => s.dateFormat);
-  const [filters, setFilters] = useState({ customer: "", is_active: "", search: "" });
+  const [filters, setFilters] = useState({ customer: "", is_active: "true", search: "" });
   const [ordering, setOrdering] = useState("-loan_date");
 
   const clean = Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== ""));

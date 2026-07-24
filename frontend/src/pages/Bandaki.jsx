@@ -21,12 +21,14 @@ export default function Bandaki() {
 
   return (
     <div className="flex h-full flex-col">
-      <PageHeader
-        title="Bandaki"
-        subtitle="Gold loans — money lent against gold. Interest accrues by the day and is shown live."
-      />
+      <div className="hidden sm:block">
+        <PageHeader
+          title="Bandaki"
+          subtitle="Gold loans — money lent against gold. Interest accrues by the day and is shown live."
+        />
+      </div>
 
-      <div className="mb-4 flex shrink-0 gap-2 border-b border-gray-200">
+      <div className="mb-3 flex shrink-0 gap-2 border-b border-gray-200">
         {["loans", "customers"].map((t) => (
           <button
             key={t}
@@ -94,15 +96,15 @@ function Loans() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="mb-4 shrink-0 space-y-2">
+      <div className="mb-3 shrink-0 space-y-2">
         <div className="flex gap-2">
           <button className="btn-primary flex-1 sm:flex-none" onClick={() => setLoan({})}>
             <Plus size={16} /> New bandaki
           </button>
         </div>
-        <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:justify-end">
+        <div className="flex flex-wrap gap-2 sm:justify-end">
           <select
-            className="input sm:w-48"
+            className="input min-w-0 flex-1 truncate sm:w-48 sm:flex-none"
             value={filters.customer}
             onChange={(e) => setFilters((f) => ({ ...f, customer: e.target.value }))}
           >
@@ -110,16 +112,16 @@ function Loans() {
             {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
           <select
-            className="input sm:w-36"
+            className="input w-28 shrink-0 sm:w-36"
             value={filters.is_active}
             onChange={(e) => setFilters((f) => ({ ...f, is_active: e.target.value }))}
           >
-            <option value="">Active &amp; closed</option>
-            <option value="true">Active only</option>
-            <option value="false">Closed only</option>
+            <option value="">All</option>
+            <option value="true">Active</option>
+            <option value="false">Closed</option>
           </select>
           <input
-            className="input sm:w-56"
+            className="input w-full sm:w-56"
             placeholder="Search customer, phone, remarks…"
             value={filters.search}
             onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}

@@ -62,6 +62,21 @@ export default function Reports() {
     }
   };
 
+  // Build a descriptive filename from the active selections, e.g.
+  //   gold_ram_magh-2080.xlsx  ·  cash_all_2024-02-01_to_2024-02-10.pdf
+  const buildFilename = (fmt) => {
+    const parts = [kind];
+    const k = form.karigar ? karigars.find((x) => String(x.id) === String(form.karigar)) : null;
+    parts.push(k ? k.full_name.split(/\s+/)[0].toLowerCase() : "all");
+    if (monthMode) {
+      parts.push(`${months[Number(form.month)]}-${form.year}`);
+    } else if (form.date_from || form.date_to) {
+      parts.push(`${form.date_from || "start"}_to_${form.date_to || "today"}`);
+    }
+    const stem = parts.join("_").replace(/[^a-zA-Z0-9._-]/g, "");
+    return `${stem}.${fmt === "excel" ? "xlsx" : "pdf"}`;
+  };
+
   const download = async (fmt) => {
     setError("");
     try {
@@ -70,7 +85,7 @@ export default function Reports() {
       const url = URL.createObjectURL(resp.data);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `${kind}-report.${fmt === "excel" ? "xlsx" : "pdf"}`;
+      a.download = buildFilename(fmt);
       a.click();
       URL.revokeObjectURL(url);
     } catch (e) {
@@ -80,9 +95,11 @@ export default function Reports() {
 
   return (
     <div>
-      <PageHeader title="Reports" subtitle="Cash and gold ledgers by date range or month, with Excel & PDF export." />
+      <div className="hidden sm:block">
+        <PageHeader title="Reports" subtitle="Cash and gold ledgers by date range or month, with Excel & PDF export." />
+      </div>
 
-      <div className="card mb-6 space-y-4">
+      <div className="card mb-4 space-y-4">
         <div className="flex gap-2">
           {["gold", "cash"].map((k) => (
             <button
@@ -97,12 +114,12 @@ export default function Reports() {
           ))}
         </div>
 
-        {/* Month / year quick period. Selecting a month disables the date range. */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        {/* Month + year on one row (karigar full width on mobile). */}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           <Field label={`Month (${calendar})`}>
             <select className="input" value={form.month}
               onChange={(e) => setForm((f) => ({ ...f, month: e.target.value }))}>
-              <option value="">— Custom range —</option>
+              <option value="">— Range —</option>
               {months.map((m, i) => <option key={m} value={i}>{m}</option>)}
             </select>
           </Field>
@@ -113,17 +130,19 @@ export default function Reports() {
               {years.map((y) => <option key={y} value={y}>{y}</option>)}
             </select>
           </Field>
-          <Field label="Karigar">
-            <select className="input" value={form.karigar}
-              onChange={(e) => setForm((f) => ({ ...f, karigar: e.target.value }))}>
-              <option value="">All karigars</option>
-              {karigars.map((k) => <option key={k.id} value={k.id}>{k.full_name}</option>)}
-            </select>
-          </Field>
+          <div className="col-span-2 sm:col-span-1">
+            <Field label="Karigar">
+              <select className="input" value={form.karigar}
+                onChange={(e) => setForm((f) => ({ ...f, karigar: e.target.value }))}>
+                <option value="">All karigars</option>
+                {karigars.map((k) => <option key={k.id} value={k.id}>{k.full_name}</option>)}
+              </select>
+            </Field>
+          </div>
         </div>
 
-        {/* Free date range — disabled while a month is selected. */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        {/* From + to on one row — disabled while a month is selected. */}
+        <div className="grid grid-cols-2 gap-3">
           <Field label="From (AD)">
             <input className="input" type="date" value={form.date_from} disabled={monthMode}
               onChange={(e) => setForm((f) => ({ ...f, date_from: e.target.value }))} />
@@ -138,11 +157,6 @@ export default function Reports() {
               <p className="mt-1 text-xs text-gray-400">{formatDate(form.date_to, "BS", { format: dateFormat })}</p>
             )}
           </Field>
-          <div className="flex items-end">
-            <button className="btn-primary w-full" onClick={preview}>
-              <Eye size={16} /> Preview
-            </button>
-          </div>
         </div>
 
         {monthMode && (
@@ -151,7 +165,11 @@ export default function Reports() {
           </p>
         )}
 
+        {/* Actions on one row (Preview + exports) to save vertical space. */}
         <div className="flex flex-wrap gap-2">
+          <button className="btn-primary flex-1 sm:flex-none" onClick={preview}>
+            <Eye size={16} /> Preview
+          </button>
           <button className="btn-secondary" onClick={() => download("excel")}>
             <FileSpreadsheet size={16} /> Export Excel
           </button>

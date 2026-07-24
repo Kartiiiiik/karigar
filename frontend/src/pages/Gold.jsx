@@ -31,9 +31,11 @@ export default function Gold() {
 
   return (
     <div className="flex h-full flex-col">
-      <PageHeader title="Gold Ledger" subtitle="Balances are net weight (grams). Dr = given, Cr = received." />
+      <div className="hidden sm:block">
+        <PageHeader title="Gold Ledger" subtitle="Balances are net weight (grams). Dr = given, Cr = received." />
+      </div>
 
-      <div className="mb-4 flex shrink-0 gap-2 border-b border-gray-200">
+      <div className="mb-3 flex shrink-0 gap-2 border-b border-gray-200">
         {["entries", "orders"].map((t) => (
           <button
             key={t}
@@ -138,10 +140,10 @@ function Entries({ isStaff }) {
             </button>
           </div>
         )}
-        <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:justify-end">
+        <div className="flex flex-wrap gap-2 sm:justify-end">
           {isStaff && (
             <select
-              className="input sm:w-40"
+              className="input min-w-0 flex-1 truncate sm:w-40 sm:flex-none"
               value={filters.karigar}
               onChange={(e) =>
                 setFilters((f) => ({ ...f, karigar: e.target.value, search: e.target.value ? f.search : "" }))
@@ -152,16 +154,16 @@ function Entries({ isStaff }) {
             </select>
           )}
           <select
-            className="input sm:w-36"
+            className="input w-24 shrink-0 sm:w-36"
             value={filters.direction}
             onChange={(e) => setFilters((f) => ({ ...f, direction: e.target.value }))}
           >
             <option value="">Dr &amp; Cr</option>
-            <option value="dr">Dr (given)</option>
-            <option value="cr">Cr (received)</option>
+            <option value="dr">Dr</option>
+            <option value="cr">Cr</option>
           </select>
           <input
-            className="input sm:w-56"
+            className="input w-full sm:w-56"
             placeholder={searchDisabled ? "Select a karigar to search" : "Search amount, ornament, order…"}
             value={filters.search}
             disabled={searchDisabled}

@@ -1,4 +1,5 @@
 """Report API: Cash and Gold ledgers, JSON preview + Excel/PDF export."""
+import re
 from datetime import datetime
 
 from django.http import HttpResponse
@@ -23,14 +24,28 @@ def _parse_date(value):
         return None
 
 
+def _report_stem(report, slug):
+    """Descriptive filename stem reflecting the selection, e.g.
+    'gold_ram_2024-02-01_to_2024-02-10' or 'cash_all'."""
+    parts = [slug]
+    karigar = report.get("karigar")
+    parts.append(karigar.full_name.split()[0].lower() if karigar else "all")
+    frm, to = report.get("date_from"), report.get("date_to")
+    if frm or to:
+        parts.append(f"{frm or 'start'}_to_{to or 'today'}")
+    stem = "_".join(str(p) for p in parts)
+    return re.sub(r"[^A-Za-z0-9._-]", "", stem)
+
+
 def _serve(report, slug, fmt):
+    stem = _report_stem(report, slug)
     if fmt == "excel":
         resp = HttpResponse(to_excel(report), content_type=_EXCEL_CT)
-        resp["Content-Disposition"] = f'attachment; filename="{slug}-report.xlsx"'
+        resp["Content-Disposition"] = f'attachment; filename="{stem}.xlsx"'
         return resp
     if fmt == "pdf":
         resp = HttpResponse(to_pdf(report), content_type="application/pdf")
-        resp["Content-Disposition"] = f'attachment; filename="{slug}-report.pdf"'
+        resp["Content-Disposition"] = f'attachment; filename="{stem}.pdf"'
         return resp
     return {
         "title": report["title"],

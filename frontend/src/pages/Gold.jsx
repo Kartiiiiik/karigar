@@ -267,14 +267,28 @@ function GoldEntryForm({ entry, karigars, onClose, onSaved }) {
   const orders = useFetch("/orders/", karigarId ? { karigar: karigarId, page_size: 200 } : null);
   const ornaments = ornData?.results ?? [];
 
-  // Default a new receipt's ornament to "Gold" (raw gold received) once loaded.
+  // The ornament/order <select> options are fetched below (async), so they
+  // aren't in the DOM when react-hook-form applies defaultValues at mount. On
+  // edit the native select therefore can't show the saved value — re-sync it
+  // once the list arrives. (Also defaults a new receipt's ornament to "Gold".)
   useEffect(() => {
-    if (!isEdit && isReceive && ornaments.length && !getValues("ornament")) {
+    if (!ornaments.length) return;
+    if (isEdit && entry.ornament) {
+      setValue("ornament", String(entry.ornament));
+    } else if (!isEdit && isReceive && !getValues("ornament")) {
       const gold = ornaments.find((o) => o.name.toLowerCase() === "gold");
       if (gold) setValue("ornament", String(gold.id));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ornData]);
+
+  // Same async-options issue for the linked order select.
+  useEffect(() => {
+    if (isEdit && entry.order && orders.data?.results?.length) {
+      setValue("order", String(entry.order));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orders.data]);
 
   const onSubmit = async (v) => {
     setError("");

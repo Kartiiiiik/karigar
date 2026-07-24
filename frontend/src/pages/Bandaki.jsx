@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useForm, useWatch } from "react-hook-form";
 import { Plus, Pencil, UserPlus } from "lucide-react";
 import api, { apiError } from "../lib/api";
@@ -71,6 +72,17 @@ function Loans() {
   const customers = custData?.results ?? [];
   const items = data?.results ?? [];
   const count = data?.count ?? 0;
+
+  // Open the new-loan form when arrived via the dashboard quick action.
+  const [sp, setSp] = useSearchParams();
+  useEffect(() => {
+    if (sp.get("action") === "new") {
+      setLoan({});
+      sp.delete("action");
+      setSp(sp, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const sort = (field) => setOrdering((o) => (o === field ? `-${field}` : field));
 

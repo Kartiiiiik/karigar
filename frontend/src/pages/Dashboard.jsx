@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import {
-  Gem, Coins, Phone, MapPin, UserPlus, PackagePlus, Banknote,
+  Gem, Coins, Phone, MapPin, UserPlus, HandCoins, Banknote,
 } from "lucide-react";
 import { useFetch } from "../hooks/useFetch";
 import { useAuthStore } from "../store/auth";
@@ -107,6 +107,7 @@ function RecentList({ title, items, link, empty, isCash }) {
 // Owner / Manager home
 // ---------------------------------------------------------------------------
 function StaffHome({ user }) {
+  const isOwner = user?.role === "owner";
   const { data: karigarData } = useFetch("/karigars/", { page_size: 200 });
   const karigars = karigarData?.results ?? [];
 
@@ -129,7 +130,7 @@ function StaffHome({ user }) {
           <QuickAction to="/cash?action=out" icon={Banknote} label="Cash Out" tone="amber" />
           <QuickAction to="/cash?action=in" icon={Banknote} label="Cash In" tone="green" />
           <QuickAction to="/karigars?action=new" icon={UserPlus} label="Add Karigar" />
-          <QuickAction to="/gold?tab=orders&action=neworder" icon={PackagePlus} label="New Order" />
+          {isOwner && <QuickAction to="/bandaki?action=new" icon={HandCoins} label="Add Bandaki" />}
         </div>
       </div>
 

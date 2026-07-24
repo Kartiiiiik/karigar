@@ -115,6 +115,11 @@ export function bsToApi(year, monthIdx, day) {
   return toApiDate(new NepaliDate(year, monthIdx, day).toJsDate());
 }
 
+/** Weekday (0 = Sunday .. 6 = Saturday) of the 1st of a BS month. */
+export function bsMonthStartWeekday(year, monthIdx) {
+  return new NepaliDate(year, monthIdx, 1).toJsDate().getDay();
+}
+
 /** AD ISO/date -> BS parts `{ year, month (0-based), day }`, or null. */
 export function adToBsParts(value) {
   if (!value) return null;

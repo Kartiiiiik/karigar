@@ -3,7 +3,8 @@ import { FileSpreadsheet, FileText, Eye } from "lucide-react";
 import api, { apiError } from "../lib/api";
 import { useFetch } from "../hooks/useFetch";
 import { PageHeader, Spinner, ErrorState, Field, STICKY_TH } from "../components/ui";
-import { formatDate, BS_MONTHS, monthRangeToApi, currentYear } from "../lib/date";
+import DateInput from "../components/DateInput";
+import { BS_MONTHS, monthRangeToApi, currentYear } from "../lib/date";
 import { useSettingsStore } from "../store/settings";
 
 const AD_MONTHS = [
@@ -17,7 +18,6 @@ const footTd = "sticky z-20 h-10 whitespace-nowrap border-t border-amber-200 bg-
 
 export default function Reports() {
   const calendar = useSettingsStore((s) => s.calendar);
-  const dateFormat = useSettingsStore((s) => s.dateFormat);
   const { data: karigarData } = useFetch("/karigars/", { page_size: 200 });
   const karigars = karigarData?.results ?? [];
 
@@ -143,19 +143,13 @@ export default function Reports() {
 
         {/* From + to on one row — disabled while a month is selected. */}
         <div className="grid grid-cols-2 gap-3">
-          <Field label="From (AD)">
-            <input className="input" type="date" value={form.date_from} disabled={monthMode}
-              onChange={(e) => setForm((f) => ({ ...f, date_from: e.target.value }))} />
-            {calendar === "BS" && form.date_from && !monthMode && (
-              <p className="mt-1 text-xs text-gray-400">{formatDate(form.date_from, "BS", { format: dateFormat })}</p>
-            )}
+          <Field label={`From (${calendar})`}>
+            <DateInput calendar={calendar} value={form.date_from} disabled={monthMode}
+              onChange={(v) => setForm((f) => ({ ...f, date_from: v }))} />
           </Field>
-          <Field label="To (AD)">
-            <input className="input" type="date" value={form.date_to} disabled={monthMode}
-              onChange={(e) => setForm((f) => ({ ...f, date_to: e.target.value }))} />
-            {calendar === "BS" && form.date_to && !monthMode && (
-              <p className="mt-1 text-xs text-gray-400">{formatDate(form.date_to, "BS", { format: dateFormat })}</p>
-            )}
+          <Field label={`To (${calendar})`}>
+            <DateInput calendar={calendar} value={form.date_to} disabled={monthMode}
+              onChange={(v) => setForm((f) => ({ ...f, date_to: v }))} />
           </Field>
         </div>
 

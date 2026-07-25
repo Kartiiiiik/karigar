@@ -12,9 +12,10 @@ from ninja import NinjaAPI
 from ninja.errors import AuthenticationError, HttpError, ValidationError
 
 from apps.accounts.api import router as accounts_router
+from apps.accounts.api import subscription_router
 from apps.backups.api import router as backups_router
 from apps.bandaki.api import router as bandaki_router
-from apps.common.auth import auth
+from apps.common.auth import SubscriptionExpired, auth
 from apps.ledger.api import router as ledger_router
 from apps.reports.api import router as reports_router
 
@@ -24,6 +25,7 @@ logger = logging.getLogger("apps")
 api = NinjaAPI(title="Karigar API", version="1.0", auth=auth)
 
 api.add_router("/auth", accounts_router)
+api.add_router("", subscription_router)
 api.add_router("", ledger_router)
 api.add_router("", reports_router)
 api.add_router("", backups_router)
@@ -45,6 +47,21 @@ def on_validation_error(request, exc):
 def on_auth_error(request, exc):
     return api.create_response(
         request, _envelope("Authentication credentials were not provided or are invalid.", 401), status=401
+    )
+
+
+@api.exception_handler(SubscriptionExpired)
+def on_subscription_expired(request, exc):
+    # Machine-readable code so the frontend can lock the app on any 403 carrying
+    # SUBSCRIPTION_EXPIRED (even mid-session).
+    return api.create_response(
+        request,
+        _envelope(
+            "Your subscription has ended. Please contact the administrator to "
+            "continue the services.",
+            "SUBSCRIPTION_EXPIRED",
+        ),
+        status=403,
     )
 
 

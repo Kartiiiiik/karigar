@@ -15,8 +15,13 @@ if env("USE_SQLITE", default=False):
 # Security hardening
 # ---------------------------------------------------------------------------
 SECURE_SSL_REDIRECT = env.bool("DJANGO_SECURE_SSL_REDIRECT", default=True)
-SESSION_COOKIE_SECURE = True
-CSRF_COOKIE_SECURE = True
+# Secure by default (real HTTPS prod). Set these False for a local HTTP run so
+# the admin's session/CSRF cookies are actually sent over plain HTTP.
+SESSION_COOKIE_SECURE = env.bool("DJANGO_SESSION_COOKIE_SECURE", default=True)
+CSRF_COOKIE_SECURE = env.bool("DJANGO_CSRF_COOKIE_SECURE", default=True)
+# Origins Django trusts for unsafe (POST) requests — needed for admin login
+# behind the nginx proxy. e.g. http://localhost:8080, https://<your-ngrok>.
+CSRF_TRUSTED_ORIGINS = env.list("DJANGO_CSRF_TRUSTED_ORIGINS", default=[])
 SECURE_HSTS_SECONDS = env.int("DJANGO_SECURE_HSTS_SECONDS", default=31536000)
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 SECURE_HSTS_PRELOAD = True

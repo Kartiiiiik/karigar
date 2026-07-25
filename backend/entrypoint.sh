@@ -9,6 +9,10 @@ if [ "${RUN_MIGRATIONS:-1}" = "1" ]; then
 
   echo "Collecting static files..."
   python manage.py collectstatic --noinput
+
+  # Bootstrap the platform superuser from env (idempotent; no-op if it exists
+  # or if the vars are unset).
+  python manage.py ensure_superuser
 fi
 
 exec "$@"

@@ -32,3 +32,4 @@ npm-debug.log*
 Thumbs.db
 secure-backups/
 media-files/
+docker-compose.override.yml

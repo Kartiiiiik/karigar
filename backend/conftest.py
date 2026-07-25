@@ -11,8 +11,23 @@ from urllib.parse import urlencode
 import pytest
 from django.test import Client
 
-from apps.accounts.models import Role, Shop, User
+from django.utils import timezone
+
+from apps.accounts.models import Role, Shop, Subscription, User
 from apps.ledger.models import KarigarProfile, Ornament
+
+
+def _activate(shop, days=365):
+    """Attach an active subscription so shops pass the subscription gate by
+    default (mirrors production, where provisioning always sets one). Tests that
+    exercise expiry override this via update_or_create."""
+    today = timezone.localdate()
+    Subscription.objects.create(
+        shop=shop,
+        start_date=today - datetime.timedelta(days=1),
+        end_date=today + datetime.timedelta(days=days),
+    )
+    return shop
 
 
 class Api:
@@ -59,12 +74,12 @@ def api():
 
 @pytest.fixture
 def shop(db):
-    return Shop.objects.create(name="Test Shop")
+    return _activate(Shop.objects.create(name="Test Shop"))
 
 
 @pytest.fixture
 def other_shop(db):
-    return Shop.objects.create(name="Other Shop")
+    return _activate(Shop.objects.create(name="Other Shop"))
 
 
 def _make_user(shop, username, role, **kw):

@@ -1,6 +1,7 @@
 import { Routes, Route } from "react-router-dom";
 import Layout from "./components/Layout";
 import ProtectedRoute from "./components/ProtectedRoute";
+import SubscriptionGate from "./components/SubscriptionGate";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Karigars from "./pages/Karigars";
@@ -22,8 +23,9 @@ function Staff({ children }) {
 
 export default function App() {
   return (
-    <Routes>
-      <Route path="/login" element={<Login />} />
+    <SubscriptionGate>
+      <Routes>
+        <Route path="/login" element={<Login />} />
 
       <Route
         element={
@@ -45,6 +47,7 @@ export default function App() {
       </Route>
 
       <Route path="*" element={<NotFound />} />
-    </Routes>
+      </Routes>
+    </SubscriptionGate>
   );
 }

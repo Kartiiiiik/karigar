@@ -68,3 +68,10 @@ class AppSettingPatch(Schema):
 
 class DetailOut(Schema):
     detail: str
+
+
+class SubscriptionStatusOut(Schema):
+    active: bool
+    end_date: str | None = None  # AD ISO date; frontend converts for BS display
+    days_remaining: int = 0
+    message: str = ""

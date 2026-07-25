@@ -9,7 +9,7 @@ from ninja.pagination import paginate
 from ninja.throttling import AnonRateThrottle
 from ninja_jwt.tokens import RefreshToken
 
-from apps.common.auth import require_owner, require_staff
+from apps.common.auth import open_auth, require_owner, require_staff
 from apps.common.pagination import DefaultPagination
 
 from .models import AppSetting, CalendarPreference, DateFormat, Role
@@ -23,12 +23,48 @@ from .schemas import (
     ManagerCreateIn,
     ManagerUpdateIn,
     RefreshIn,
+    SubscriptionStatusOut,
     TokenOut,
     UserOut,
 )
 
 User = get_user_model()
 router = Router(tags=["accounts"])
+
+# Subscription status lives on its own router mounted at the API root so the
+# path is /api/v1/subscription/status (not under /auth).
+subscription_router = Router(tags=["subscription"])
+
+EXPIRED_MESSAGE = (
+    "Your subscription has ended. Please contact the administrator to continue "
+    "the services."
+)
+
+
+def subscription_status_payload(user):
+    """Build the subscription status for a user's shop. Superusers (platform
+    admins) are always reported active — they are never gated."""
+    if getattr(user, "is_superuser", False):
+        return {"active": True, "end_date": None, "days_remaining": 0,
+                "message": "Platform administrator — not subject to subscription limits."}
+    shop = getattr(user, "shop", None)
+    sub = getattr(shop, "subscription", None) if shop else None
+    active = bool(sub and sub.is_active)
+    return {
+        "active": active,
+        "end_date": sub.end_date.isoformat() if sub else None,
+        "days_remaining": sub.days_remaining if sub else 0,
+        "message": (f"Subscription active — {sub.days_remaining} day(s) remaining."
+                    if active else EXPIRED_MESSAGE),
+    }
+
+
+@subscription_router.get("/subscription/status", response=SubscriptionStatusOut, auth=open_auth)
+def subscription_status(request):
+    """Current shop's subscription status. Uses the UNGATED auth so it stays
+    reachable even when the shop is expired, letting the frontend render the
+    lock and poll for auto-recovery."""
+    return subscription_status_payload(request.auth)
 
 _login_throttle = [AnonRateThrottle("10/m")]
 
@@ -74,8 +110,10 @@ def refresh_token(request, payload: RefreshIn):
     return {"access": access, "refresh": refresh}
 
 
-@router.get("/me/", response=UserOut)
+@router.get("/me/", response=UserOut, auth=open_auth)
 def me(request):
+    # Ungated: the frontend needs the profile to render the lock screen even
+    # when the shop subscription is expired.
     return request.auth
 
 

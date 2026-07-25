@@ -1,5 +1,6 @@
 import axios from "axios";
 import { useAuthStore } from "../store/auth";
+import { useSubscriptionStore } from "../store/subscription";
 
 // Single source of truth for the API base. Overridable at build time via
 // VITE_API_BASE; defaults to the same-origin path proxied by Vite (dev) and
@@ -35,6 +36,12 @@ api.interceptors.response.use(
   async (error) => {
     const original = error.config;
     const status = error.response?.status;
+
+    // Subscription gate: any 403 carrying SUBSCRIPTION_EXPIRED locks the app
+    // instantly (even mid-session), regardless of which endpoint tripped it.
+    if (status === 403 && error.response?.data?.error?.code === "SUBSCRIPTION_EXPIRED") {
+      useSubscriptionStore.getState().markExpired(error.response.data.error.message);
+    }
 
     if (status === 401 && !original._retry) {
       original._retry = true;

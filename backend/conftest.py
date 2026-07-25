@@ -10,7 +10,6 @@ from urllib.parse import urlencode
 
 import pytest
 from django.test import Client
-
 from django.utils import timezone
 
 from apps.accounts.models import Role, Shop, Subscription, User

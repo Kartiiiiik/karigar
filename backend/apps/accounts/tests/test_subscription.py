@@ -4,7 +4,7 @@ import datetime
 import pytest
 from django.utils import timezone
 
-from apps.accounts.models import Role, Shop, Subscription, User
+from apps.accounts.models import Shop, Subscription, User
 
 STATUS = "/api/v1/subscription/status"
 

@@ -34,7 +34,9 @@ export default function Cash() {
   const summaryParams = useMemo(() => clean, [cleanKey]);
   const { data, loading, error, refresh } = useFetch("/cash-entries/", listParams);
   const summary = useFetch("/cash-entries/summary/", summaryParams);
-  const { data: karigarData } = useFetch("/karigars/", isStaff ? { page_size: 200 } : null);
+  const { data: karigarData, refresh: refreshKarigars } = useFetch(
+    "/karigars/", isStaff ? { page_size: 200 } : null,
+  );
   const [entry, setEntry] = useState(null);
   const [archiving, setArchiving] = useState(null);
   const karigars = karigarData?.results ?? [];
@@ -54,6 +56,10 @@ export default function Cash() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Any write moves the rows, the Total row AND the karigar's running
+  // balance behind the Opening/Closing rows — reload all three together.
+  const reload = () => { refresh(); summary.refresh(); refreshKarigars(); };
 
   const sort = (field) => setOrdering((o) => (o === field ? `-${field}` : field));
 
@@ -193,7 +199,7 @@ export default function Cash() {
           kind="cash"
           entry={archiving}
           onClose={() => setArchiving(null)}
-          onDone={() => { setArchiving(null); refresh(); summary.refresh(); }}
+          onDone={() => { setArchiving(null); reload(); }}
         />
       )}
 
@@ -202,7 +208,7 @@ export default function Cash() {
           entry={entry}
           karigars={karigars}
           onClose={() => setEntry(null)}
-          onSaved={() => { setEntry(null); refresh(); summary.refresh(); }}
+          onSaved={() => { setEntry(null); reload(); }}
         />
       )}
     </div>

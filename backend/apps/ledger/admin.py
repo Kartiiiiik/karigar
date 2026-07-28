@@ -1,7 +1,7 @@
 from django.contrib import admin
 from simple_history.admin import SimpleHistoryAdmin
 
-from .models import CashEntry, GoldEntry, KarigarProfile, Order, Ornament
+from .models import CashEntry, GoldEntry, KarigarProfile, Ornament
 
 
 @admin.register(Ornament)
@@ -18,18 +18,11 @@ class KarigarProfileAdmin(SimpleHistoryAdmin):
     search_fields = ("full_name", "phone", "user__username")
 
 
-@admin.register(Order)
-class OrderAdmin(SimpleHistoryAdmin):
-    list_display = ("__str__", "karigar", "status", "created_at")
-    list_filter = ("status", "shop")
-    search_fields = ("order_number",)
-
-
 @admin.register(GoldEntry)
 class GoldEntryAdmin(SimpleHistoryAdmin):
     list_display = ("__str__", "karigar", "direction", "gross_weight_g", "carat", "net_weight_g", "entry_date")
     list_filter = ("direction", "carat", "shop")
-    search_fields = ("remarks", "order__order_number")
+    search_fields = ("remarks", "order_number")
 
 
 @admin.register(CashEntry)

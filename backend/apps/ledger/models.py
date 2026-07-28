@@ -1,4 +1,4 @@
-"""Ledger domain: karigars, ornaments, orders, and the gold & cash entries.
+"""Ledger domain: karigars, ornaments, and the gold & cash entries.
 
 Accounting conventions (from the shop's books):
   * Dr = given to the karigar  (gold/cash goes OUT to them)
@@ -19,6 +19,7 @@ from django.core.validators import MinValueValidator
 from django.db import models
 from django.db.models import Case, DecimalField, F, OuterRef, Subquery, Sum, Value, When
 from django.db.models.functions import Coalesce, Lower
+from django.utils import timezone
 from simple_history.models import HistoricalRecords
 
 from apps.common.models import AuthoredModel, TimeStampedModel
@@ -184,82 +185,77 @@ class KarigarProfile(AuthoredModel):
         return self.opening_cash_npr + agg["total"]
 
 
-def _order_dir_sum_subquery(direction):
-    dec = DecimalField(max_digits=18, decimal_places=3)
-    return (
-        GoldEntry.objects.filter(order=OuterRef("pk"), direction=direction)
-        .values("order")
-        .annotate(t=Coalesce(Sum("net_weight_g"), Value(Decimal("0")), output_field=dec))
-        .values("t")
-    )
+class LiveEntryManager(models.Manager):
+    """Default manager that hides archived entries.
 
+    Ledger entries ARE the balances — every figure in the app is a sum over
+    them (karigar balances, the ledger summaries, the report exports).
+    Rather than remembering
+    ``.filter(archived_at__isnull=True)`` at each of those sites, and hoping the
+    next one added remembers too, the default manager drops archived rows so
+    they are all correct for free. Reverse accessors like
+    ``karigar.gold_entries`` use this manager, so they are filtered as well.
 
-class OrderQuerySet(models.QuerySet):
-    def with_totals(self):
-        """Annotate `_net_issued` / `_net_received` so per-order wastage doesn't
-        run aggregate queries per row (avoids N+1)."""
-        dec = DecimalField(max_digits=18, decimal_places=3)
-        return self.annotate(
-            _net_issued=Coalesce(
-                Subquery(_order_dir_sum_subquery(Direction.DR), output_field=dec),
-                Value(Decimal("0")), output_field=dec,
-            ),
-            _net_received=Coalesce(
-                Subquery(_order_dir_sum_subquery(Direction.CR), output_field=dec),
-                Value(Decimal("0")), output_field=dec,
-            ),
-        )
+    ``all_objects`` reaches archived rows — the Archive page and restore.
 
-
-class Order(AuthoredModel):
-    """A (usually numbered) job: gold issued to a karigar to make an ornament.
-
-    ``order_number`` is entered manually, is optional, and is NOT unique —
-    entries may share or omit it. It is indexed for search.
+    Caveat: manager filtering does NOT apply to lookups that span a relation
+    inside a query (``Q(gold_entries__…)``). Any such filter added later must
+    exclude archived rows itself.
     """
 
-    objects = OrderQuerySet.as_manager()
+    def get_queryset(self):
+        return super().get_queryset().filter(archived_at__isnull=True)
 
-    class Status(models.TextChoices):
-        OPEN = "open", "Open"
-        COMPLETED = "completed", "Completed"
-        CANCELLED = "cancelled", "Cancelled"
 
-    shop = models.ForeignKey("accounts.Shop", on_delete=models.CASCADE, related_name="orders")
-    order_number = models.CharField(max_length=60, blank=True, null=True, db_index=True)
-    karigar = models.ForeignKey(KarigarProfile, on_delete=models.PROTECT, related_name="orders")
-    ornament = models.ForeignKey(
-        Ornament, on_delete=models.SET_NULL, null=True, blank=True, related_name="orders"
+class ArchivableEntry(AuthoredModel):
+    """Soft delete for the ledger entries.
+
+    Entries are archived rather than deleted so a mis-keyed weight can be
+    undone and the reason a balance moved stays answerable. An archived entry
+    keeps its full ``simple_history`` trail. Only an owner may destroy one for
+    good, and only once it is already archived.
+    """
+
+    archived_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    archived_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="+",
     )
-    status = models.CharField(max_length=10, choices=Status.choices, default=Status.OPEN)
-    remarks = models.TextField(blank=True)
+    archive_reason = models.CharField(max_length=200, blank=True)
 
-    history = HistoricalRecords()
+    # The first manager declared becomes `_default_manager`, which is what
+    # reverse relations use. Django builds its own unfiltered `_base_manager`,
+    # so following a forward FK to an archived row still works.
+    objects = LiveEntryManager()
+    all_objects = models.Manager()
 
     class Meta:
-        ordering = ["-created_at"]
+        abstract = True
 
-    def __str__(self):
-        return self.order_number or f"Order #{self.pk}"
+    @property
+    def is_archived(self):
+        return self.archived_at is not None
 
-    def net_issued(self):
-        return self.gold_entries.filter(direction=Direction.DR).aggregate(
-            t=Coalesce(Sum("net_weight_g"), Value(Decimal("0")),
-                       output_field=DecimalField(max_digits=14, decimal_places=3))
-        )["t"]
+    def archive(self, user, reason=""):
+        self.archived_at = timezone.now()
+        self.archived_by = user
+        self.archive_reason = (reason or "")[:200]
+        self.updated_by = user
+        self.save(update_fields=[
+            "archived_at", "archived_by", "archive_reason", "updated_by", "updated_at",
+        ])
 
-    def net_received(self):
-        return self.gold_entries.filter(direction=Direction.CR).aggregate(
-            t=Coalesce(Sum("net_weight_g"), Value(Decimal("0")),
-                       output_field=DecimalField(max_digits=14, decimal_places=3))
-        )["t"]
+    def restore(self, user):
+        self.archived_at = None
+        self.archived_by = None
+        self.archive_reason = ""
+        self.updated_by = user
+        self.save(update_fields=[
+            "archived_at", "archived_by", "archive_reason", "updated_by", "updated_at",
+        ])
 
-    def wastage(self):
-        """Net issued − net received (grams). Positive = gold still out / lost."""
-        return (self.net_issued() - self.net_received()).quantize(GRAM_QUANT)
 
-
-class GoldEntry(AuthoredModel):
+class GoldEntry(ArchivableEntry):
     """A single gold movement to/from a karigar.
 
     ``net_weight_g`` is computed from gross + carat and **stored** so historical
@@ -267,9 +263,10 @@ class GoldEntry(AuthoredModel):
     """
 
     shop = models.ForeignKey("accounts.Shop", on_delete=models.CASCADE, related_name="gold_entries")
-    order = models.ForeignKey(
-        Order, on_delete=models.SET_NULL, null=True, blank=True, related_name="gold_entries"
-    )
+    # Free-text job reference. Deliberately NOT a foreign key: the shop writes
+    # whatever number is on the paperwork, entries may share or omit it, and
+    # nothing in the app is derived from it. Indexed so search stays cheap.
+    order_number = models.CharField(max_length=60, blank=True, db_index=True)
     karigar = models.ForeignKey(
         KarigarProfile, on_delete=models.PROTECT, related_name="gold_entries"
     )
@@ -306,16 +303,17 @@ class GoldEntry(AuthoredModel):
         return f"{self.get_direction_display()} {self.net_weight_g}g ({self.carat}kt)"
 
 
-class CashEntry(AuthoredModel):
+class CashEntry(ArchivableEntry):
     """A single cash movement to/from a karigar (advances / payments)."""
 
     shop = models.ForeignKey("accounts.Shop", on_delete=models.CASCADE, related_name="cash_entries")
     karigar = models.ForeignKey(
         KarigarProfile, on_delete=models.PROTECT, related_name="cash_entries"
     )
-    order = models.ForeignKey(
-        Order, on_delete=models.SET_NULL, null=True, blank=True, related_name="cash_entries"
-    )
+    # Free-text job reference. Deliberately NOT a foreign key: the shop writes
+    # whatever number is on the paperwork, entries may share or omit it, and
+    # nothing in the app is derived from it. Indexed so search stays cheap.
+    order_number = models.CharField(max_length=60, blank=True, db_index=True)
     direction = models.CharField(max_length=2, choices=Direction.choices)
     amount_npr = models.DecimalField(
         max_digits=14, decimal_places=2, validators=[MinValueValidator(Decimal("0.01"))]

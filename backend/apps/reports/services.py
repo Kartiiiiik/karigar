@@ -57,7 +57,7 @@ def build_gold_report(shop, date_from=None, date_to=None, karigar_id=None):
     calendar, fmt = _format_for(shop)
     karigar = _resolve_karigar(shop, karigar_id)
 
-    qs = GoldEntry.objects.filter(shop=shop).select_related("karigar", "ornament", "order")
+    qs = GoldEntry.objects.filter(shop=shop).select_related("karigar", "ornament")
     if karigar:
         qs = qs.filter(karigar=karigar)
     qs = _apply_range(qs, date_from, date_to).order_by("entry_date", "created_at")
@@ -89,7 +89,7 @@ def build_gold_report(shop, date_from=None, date_to=None, karigar_id=None):
         rows.append([
             format_date(e.entry_date, calendar, fmt),
             e.karigar.full_name,
-            e.order.order_number if e.order else "",
+            e.order_number,
             f"{e.gross_weight_g:.3f}",
             f"{e.carat}kt",
             f"{e.net_weight_g:.3f}" if is_dr else "",
@@ -127,7 +127,7 @@ def build_cash_report(shop, date_from=None, date_to=None, karigar_id=None):
     calendar, fmt = _format_for(shop)
     karigar = _resolve_karigar(shop, karigar_id)
 
-    qs = CashEntry.objects.filter(shop=shop).select_related("karigar", "order")
+    qs = CashEntry.objects.filter(shop=shop).select_related("karigar")
     if karigar:
         qs = qs.filter(karigar=karigar)
     qs = _apply_range(qs, date_from, date_to).order_by("entry_date", "created_at")

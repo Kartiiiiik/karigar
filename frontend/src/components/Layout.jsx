@@ -10,6 +10,7 @@ import {
   UserCog,
   Settings,
   DatabaseBackup,
+  Archive,
   Landmark,
   LogOut,
   Menu,
@@ -49,6 +50,7 @@ const NAV_GROUPS = [
     items: [
       { to: "/settings", label: "Settings", icon: Settings, roles: ["owner", "manager"] },
       { to: "/backups", label: "Backups", icon: DatabaseBackup, roles: ["owner", "manager"] },
+      { to: "/archive", label: "Archive", icon: Archive, roles: ["owner", "manager"] },
     ],
   },
 ];

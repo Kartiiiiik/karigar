@@ -1,8 +1,7 @@
 """Seed idempotent demo data.
 
 Seeds: one Shop, its AppSetting, an owner, a manager, two karigar accounts with
-profiles + opening balances, a few ornaments, sample orders and gold/cash
-ledger entries.
+profiles + opening balances, a few ornaments, and gold/cash ledger entries.
 
 Run:  python manage.py seed_demo
 """
@@ -19,7 +18,6 @@ from apps.ledger.models import (
     Direction,
     GoldEntry,
     KarigarProfile,
-    Order,
     Ornament,
 )
 
@@ -121,28 +119,19 @@ class Command(BaseCommand):
             profiles[username] = profile
         self.stdout.write(f"Karigar profiles: {', '.join(profiles)}")
 
-        # --- Sample order + gold/cash entries (only if none exist yet) ---
-        if not Order.objects.exists():
+        # --- Sample gold/cash entries (only if none exist yet) ---
+        if not GoldEntry.objects.filter(shop=shop).exists():
             k1 = profiles["karigar1"]
-            order = Order.objects.create(
-                shop=shop,
-                order_number="ORD-1001",
-                karigar=k1,
-                ornament=ornaments["Chain"],
-                status=Order.Status.OPEN,
-                remarks="Sample order: chain from issued gold.",
-                created_by=owner,
-                updated_by=owner,
-            )
-            # Issue 24kt 20g (Dr), receive a 22kt 18g chain (Cr).
+            # Issue 24kt 20g (Dr), receive a 22kt 18g chain (Cr), both tagged
+            # with the same job number written on the shop's paperwork.
             GoldEntry.objects.create(
-                shop=shop, order=order, karigar=k1, direction=Direction.DR,
+                shop=shop, order_number="ORD-1001", karigar=k1, direction=Direction.DR,
                 gross_weight_g=Decimal("20.000"), carat=24,
                 remarks="Issued for chain.", entry_date=datetime.date(2024, 2, 1),
                 created_by=owner, updated_by=owner,
             )
             GoldEntry.objects.create(
-                shop=shop, order=order, karigar=k1, direction=Direction.CR,
+                shop=shop, order_number="ORD-1001", karigar=k1, direction=Direction.CR,
                 gross_weight_g=Decimal("18.000"), carat=22,
                 ornament=ornaments["Chain"], remarks="Chain received.",
                 entry_date=datetime.date(2024, 2, 10),
@@ -155,7 +144,7 @@ class Command(BaseCommand):
                 entry_date=datetime.date(2024, 2, 5),
                 created_by=owner, updated_by=owner,
             )
-            self.stdout.write("Sample order + gold/cash entries created.")
+            self.stdout.write("Sample gold/cash entries created.")
 
         # --- Bulk demo data: >=100 gold and >=100 cash entries ---
         self._bulk_entries(shop, owner, profiles, ornaments)
@@ -174,16 +163,9 @@ class Command(BaseCommand):
         ornament_list = list(ornaments.values())
         carats = [22, 24]
 
-        # Reuse or create a pool of orders to link some entries to.
-        orders = list(Order.objects.filter(shop=shop))
-        while len(orders) < 10:
-            n = len(orders) + 1
-            orders.append(Order.objects.create(
-                shop=shop, order_number=f"ORD-{2000 + n}",
-                karigar=rng.choice(karigars), ornament=rng.choice(ornament_list),
-                status=Order.Status.OPEN, remarks="Bulk demo order.",
-                created_by=owner, updated_by=owner,
-            ))
+        # A pool of job numbers to tag some entries with. Just labels — there
+        # is no order record behind them.
+        order_numbers = [f"ORD-{2000 + n}" for n in range(1, 11)]
 
         gold_needed = max(0, gold_target - GoldEntry.objects.filter(shop=shop).count())
         for i in range(gold_needed):
@@ -192,7 +174,7 @@ class Command(BaseCommand):
             GoldEntry.objects.create(
                 shop=shop,
                 karigar=rng.choice(karigars),
-                order=rng.choice(orders) if rng.random() < 0.6 else None,
+                order_number=rng.choice(order_numbers) if rng.random() < 0.6 else "",
                 direction=direction,
                 gross_weight_g=Decimal(f"{rng.uniform(2, 60):.3f}"),
                 carat=rng.choice(carats),
@@ -210,7 +192,7 @@ class Command(BaseCommand):
             CashEntry.objects.create(
                 shop=shop,
                 karigar=rng.choice(karigars),
-                order=rng.choice(orders) if rng.random() < 0.3 else None,
+                order_number=rng.choice(order_numbers) if rng.random() < 0.3 else "",
                 direction=direction,
                 amount_npr=Decimal(f"{rng.randint(5, 400) * 50}.00"),
                 remarks=rng.choice(["", "", "Advance", "Payment", "Settlement", "Wages"]),

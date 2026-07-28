@@ -5,6 +5,40 @@ from ninja import Schema
 
 
 # ---------------------------------------------------------------------------
+# Archive
+# ---------------------------------------------------------------------------
+class ArchiveIn(Schema):
+    reason: str = ""
+
+
+class ArchiveImpact(Schema):
+    """What archiving an entry will actually change.
+
+    Computed by performing the archive in a savepoint and rolling it back, so
+    the warning shown to the user cannot drift from what the archive does.
+    """
+
+    entry_label: str
+    karigar_name: str
+    balance_before: str
+    balance_after: str
+
+
+class ArchivedFields(Schema):
+    """Mixed into the entry outputs so one schema serves the ledger and the
+    Archive page."""
+
+    archived_at: datetime | None = None
+    archived_by: str | None = None
+    archive_reason: str = ""
+
+    @staticmethod
+    def resolve_archived_by(obj):
+        user = obj.archived_by
+        return (user.full_name or user.username) if user else None
+
+
+# ---------------------------------------------------------------------------
 # Ornament
 # ---------------------------------------------------------------------------
 class OrnamentIn(Schema):
@@ -121,75 +155,6 @@ class SetPasswordIn(Schema):
 
 
 # ---------------------------------------------------------------------------
-# Order
-# ---------------------------------------------------------------------------
-class OrderIn(Schema):
-    order_number: str | None = None
-    karigar: int
-    ornament: int | None = None
-    status: str = "open"
-    remarks: str = ""
-
-
-class OrderPatch(Schema):
-    order_number: str | None = None
-    karigar: int | None = None
-    ornament: int | None = None
-    status: str | None = None
-    remarks: str | None = None
-
-
-class OrderOut(Schema):
-    id: int
-    order_number: str | None = None
-    karigar: int
-    karigar_name: str
-    ornament: int | None = None
-    ornament_name: str | None = None
-    status: str
-    remarks: str = ""
-    net_issued: str
-    net_received: str
-    wastage: str
-    created_at: datetime
-    updated_at: datetime
-
-    @staticmethod
-    def resolve_karigar(obj):
-        return obj.karigar_id
-
-    @staticmethod
-    def resolve_karigar_name(obj):
-        return obj.karigar.full_name
-
-    @staticmethod
-    def resolve_ornament(obj):
-        return obj.ornament_id
-
-    @staticmethod
-    def resolve_ornament_name(obj):
-        return obj.ornament.name if obj.ornament_id else None
-
-    @staticmethod
-    def resolve_net_issued(obj):
-        v = getattr(obj, "_net_issued", None)  # from OrderQuerySet.with_totals()
-        return str(v if v is not None else obj.net_issued())
-
-    @staticmethod
-    def resolve_net_received(obj):
-        v = getattr(obj, "_net_received", None)
-        return str(v if v is not None else obj.net_received())
-
-    @staticmethod
-    def resolve_wastage(obj):
-        issued = getattr(obj, "_net_issued", None)
-        received = getattr(obj, "_net_received", None)
-        if issued is not None and received is not None:
-            return str(issued - received)
-        return str(obj.wastage())
-
-
-# ---------------------------------------------------------------------------
 # Gold entry (multipart: photo upload)
 # ---------------------------------------------------------------------------
 class GoldEntryForm(Schema):
@@ -198,7 +163,7 @@ class GoldEntryForm(Schema):
     gross_weight_g: Decimal
     carat: int
     entry_date: date
-    order: int | None = None
+    order_number: str = ""
     ornament: int | None = None
     remarks: str = ""
 
@@ -208,14 +173,14 @@ class GoldEntryPatchForm(Schema):
     gross_weight_g: Decimal | None = None
     carat: int | None = None
     entry_date: date | None = None
-    order: int | None = None
+    order_number: str | None = None
     ornament: int | None = None
     remarks: str | None = None
 
 
-class GoldEntryOut(Schema):
+class GoldEntryOut(ArchivedFields):
     id: int
-    order: int | None = None
+    order_number: str = ""
     karigar: int
     karigar_name: str
     direction: str
@@ -238,10 +203,6 @@ class GoldEntryOut(Schema):
     @staticmethod
     def resolve_karigar_name(obj):
         return obj.karigar.full_name
-
-    @staticmethod
-    def resolve_order(obj):
-        return obj.order_id
 
     @staticmethod
     def resolve_ornament(obj):
@@ -268,7 +229,7 @@ class CashEntryIn(Schema):
     direction: str
     amount_npr: Decimal
     entry_date: date
-    order: int | None = None
+    order_number: str = ""
     remarks: str = ""
 
 
@@ -276,15 +237,15 @@ class CashEntryPatch(Schema):
     direction: str | None = None
     amount_npr: Decimal | None = None
     entry_date: date | None = None
-    order: int | None = None
+    order_number: str | None = None
     remarks: str | None = None
 
 
-class CashEntryOut(Schema):
+class CashEntryOut(ArchivedFields):
     id: int
     karigar: int
     karigar_name: str
-    order: int | None = None
+    order_number: str = ""
     direction: str
     direction_display: str
     amount_npr: Decimal
@@ -300,10 +261,6 @@ class CashEntryOut(Schema):
     @staticmethod
     def resolve_karigar_name(obj):
         return obj.karigar.full_name
-
-    @staticmethod
-    def resolve_order(obj):
-        return obj.order_id
 
     @staticmethod
     def resolve_direction_display(obj):

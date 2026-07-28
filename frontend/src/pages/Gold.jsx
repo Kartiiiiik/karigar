@@ -1,14 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useForm, useWatch } from "react-hook-form";
-import { Plus, ArrowUpRight, ArrowDownLeft, Pencil } from "lucide-react";
+import { Plus, ArrowUpRight, ArrowDownLeft, Pencil, Archive } from "lucide-react";
+import ArchiveDialog from "../components/ArchiveDialog";
 import api, { apiError } from "../lib/api";
 import { useFetch } from "../hooks/useFetch";
 import {
-  PageHeader, Spinner, EmptyState, ErrorState, Modal, Field, Badge, SortableTh, STICKY_TH,
+  PageHeader, Spinner, EmptyState, ErrorState, Modal, Field, SortableTh, STICKY_TH,
 } from "../components/ui";
 import DateInput from "../components/DateInput";
-import { formatGrams, formatGramsValue } from "../lib/format";
+import { formatGramsValue } from "../lib/format";
 
 // Small unit label shown in a column header (keeps rows unit-free).
 const GMS = <sub className="ml-0.5 text-[10px] font-normal text-gray-400">gms</sub>;
@@ -24,8 +25,6 @@ function netPreview(gross, carat) {
 }
 
 export default function Gold() {
-  const [params] = useSearchParams();
-  const [tab, setTab] = useState(params.get("tab") === "orders" ? "orders" : "entries");
   const role = useAuthStore((s) => s.user?.role);
   const isStaff = role === "owner" || role === "manager";
 
@@ -34,23 +33,8 @@ export default function Gold() {
       <div className="hidden sm:block">
         <PageHeader title="Gold Ledger" subtitle="Balances are net weight (grams). Dr = given, Cr = received." />
       </div>
-
-      <div className="mb-3 flex shrink-0 gap-2 border-b border-gray-200">
-        {["entries", "orders"].map((t) => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium capitalize ${
-              tab === t ? "border-brand-600 text-brand-700" : "border-transparent text-gray-500"
-            }`}
-          >
-            {t}
-          </button>
-        ))}
-      </div>
-
       <div className="flex min-h-0 flex-1 flex-col">
-        {tab === "entries" ? <Entries isStaff={isStaff} /> : <Orders isStaff={isStaff} />}
+        <Entries isStaff={isStaff} />
       </div>
     </div>
   );
@@ -78,6 +62,7 @@ function Entries({ isStaff }) {
   const summary = useFetch("/gold-entries/summary/", summaryParams);
   const { data: karigarData } = useFetch("/karigars/", isStaff ? { page_size: 200 } : null);
   const [entry, setEntry] = useState(null);
+  const [archiving, setArchiving] = useState(null);
   const karigars = karigarData?.results ?? [];
   const items = data?.results ?? [];
   const count = data?.count ?? 0;
@@ -206,12 +191,17 @@ function Entries({ isStaff }) {
                   <td className={`${bodyTd} font-medium text-dr`}>{e.direction === "dr" ? formatGramsValue(e.net_weight_g) : ""}</td>
                   <td className={`${bodyTd} font-medium text-cr`}>{e.direction === "cr" ? formatGramsValue(e.net_weight_g) : ""}</td>
                   <td className={`${bodyTd} text-gray-600`}>{e.ornament_name || "—"}</td>
-                  <td className={`${bodyTd} text-gray-600`}>{e.order || "—"}</td>
+                  <td className={`${bodyTd} text-gray-600`}>{e.order_number || "—"}</td>
                   {isStaff && (
                     <td className={`${bodyTd} text-right`}>
-                      <button className="text-gray-400 hover:text-brand-600" onClick={() => setEntry(e)}>
-                        <Pencil size={15} />
-                      </button>
+                      <div className="flex justify-end gap-1">
+                        <button className="p-1 text-gray-400 hover:text-brand-600" title="Edit entry" onClick={() => setEntry(e)}>
+                          <Pencil size={15} />
+                        </button>
+                        <button className="p-1 text-gray-400 hover:text-danger" title="Archive entry" onClick={() => setArchiving(e)}>
+                          <Archive size={15} />
+                        </button>
+                      </div>
                     </td>
                   )}
                 </tr>
@@ -225,6 +215,15 @@ function Entries({ isStaff }) {
             </tfoot>
           </table>
         </div>
+      )}
+
+      {archiving && (
+        <ArchiveDialog
+          kind="gold"
+          entry={archiving}
+          onClose={() => setArchiving(null)}
+          onDone={() => { setArchiving(null); refresh(); summary.refresh(); }}
+        />
       )}
 
       {entry && (
@@ -247,24 +246,21 @@ function GoldEntryForm({ entry, karigars, onClose, onSaved }) {
   const { register, handleSubmit, control, setValue, getValues } = useForm({
     defaultValues: {
       karigar: entry.karigar ?? "",
-      order: entry.order ?? "",
+      order_number: entry.order_number ?? "",
       gross_weight_g: entry.gross_weight_g ?? "",
       carat: entry.carat ?? 24,
       ornament: entry.ornament ?? "",
       remarks: entry.remarks ?? "",
       entry_date: entry.entry_date ?? new Date().toISOString().slice(0, 10),
-      new_order_number: "",
     },
   });
   const gross = useWatch({ control, name: "gross_weight_g" });
   const carat = useWatch({ control, name: "carat" });
-  const karigarId = useWatch({ control, name: "karigar" });
   const entryDate = useWatch({ control, name: "entry_date" });
   const [photo, setPhoto] = useState(null);
   const [error, setError] = useState("");
   const [addingOrnament, setAddingOrnament] = useState(false);
   const { data: ornData, refresh: refreshOrnaments } = useFetch("/ornaments/", { page_size: 200 });
-  const orders = useFetch("/orders/", karigarId ? { karigar: karigarId, page_size: 200 } : null);
   const ornaments = ornData?.results ?? [];
 
   // The ornament/order <select> options are fetched below (async), so they
@@ -282,28 +278,9 @@ function GoldEntryForm({ entry, karigars, onClose, onSaved }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ornData]);
 
-  // Same async-options issue for the linked order select.
-  useEffect(() => {
-    if (isEdit && entry.order && orders.data?.results?.length) {
-      setValue("order", String(entry.order));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orders.data]);
-
   const onSubmit = async (v) => {
     setError("");
     try {
-      let orderId = v.order || null;
-      // Inline new order creation.
-      if (v.new_order_number) {
-        const { data } = await api.post("/orders/", {
-          order_number: v.new_order_number,
-          karigar: Number(v.karigar),
-          ornament: isReceive && v.ornament ? Number(v.ornament) : null,
-        });
-        orderId = data.id;
-      }
-
       if (isEdit) {
         // JSON PATCH for fields; photo (if changed) via the dedicated endpoint.
         const payload = {
@@ -311,7 +288,7 @@ function GoldEntryForm({ entry, karigars, onClose, onSaved }) {
           carat: Number(v.carat),
           entry_date: v.entry_date,
           remarks: v.remarks || "",
-          order: orderId ? Number(orderId) : null,
+          order_number: v.order_number || "",
         };
         if (isReceive && v.ornament) payload.ornament = Number(v.ornament);
         await api.patch(`/gold-entries/${entry.id}/`, payload);
@@ -329,7 +306,7 @@ function GoldEntryForm({ entry, karigars, onClose, onSaved }) {
         fd.append("carat", v.carat);
         fd.append("entry_date", v.entry_date);
         fd.append("remarks", v.remarks || "");
-        if (orderId) fd.append("order", orderId);
+        fd.append("order_number", v.order_number || "");
         if (isReceive && v.ornament) fd.append("ornament", v.ornament);
         if (photo) fd.append("photo", photo);
         await api.post("/gold-entries/", fd);
@@ -407,19 +384,11 @@ function GoldEntryForm({ entry, karigars, onClose, onSaved }) {
           </div>
         )}
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Link to order (optional)">
-            <select className="input" {...register("order")}>
-              <option value="">No order</option>
-              {(orders.data?.results ?? []).map((o) => (
-                <option key={o.id} value={o.id}>{o.order_number || `Order #${o.id}`}</option>
-              ))}
-            </select>
-          </Field>
-          <Field label="…or new order number">
-            <input className="input" placeholder="e.g. ORD-1002" {...register("new_order_number")} />
-          </Field>
-        </div>
+        {/* Just the number written on the paperwork — a label on this entry,
+            not a link to anything. */}
+        <Field label="Order number (optional)">
+          <input className="input" placeholder="e.g. ORD-1002" {...register("order_number")} />
+        </Field>
 
         <Field label="Remarks">
           <textarea className="input" rows={2} {...register("remarks")} />
@@ -477,162 +446,6 @@ function QuickAddOrnament({ onClose, onAdded }) {
         <div className="flex justify-end gap-2">
           <button type="button" className="btn-secondary" onClick={onClose}>Cancel</button>
           <button type="submit" className="btn-primary">Add &amp; select</button>
-        </div>
-      </form>
-    </Modal>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Orders
-// ---------------------------------------------------------------------------
-function Orders({ isStaff }) {
-  const { data, loading, error, refresh } = useFetch("/orders/", { page_size: 200 });
-  const { data: karigarData } = useFetch("/karigars/", isStaff ? { page_size: 200 } : null);
-  const [editing, setEditing] = useState(null);
-  const items = data?.results ?? [];
-  const karigars = karigarData?.results ?? [];
-
-  // Open the new-order form when arrived via the dashboard quick action.
-  const [sp, setSp] = useSearchParams();
-  useEffect(() => {
-    if (isStaff && sp.get("action") === "neworder") {
-      setEditing({});
-      sp.delete("action");
-      setSp(sp, { replace: true });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  return (
-    <div className="flex h-full flex-col">
-      {isStaff && (
-        <div className="mb-4 shrink-0">
-          <button className="btn-primary" onClick={() => setEditing({})}>
-            <Plus size={16} /> New order
-          </button>
-        </div>
-      )}
-      {error && <ErrorState message={error} />}
-      {loading ? (
-        <Spinner />
-      ) : items.length === 0 ? (
-        <EmptyState message="No orders." />
-      ) : (
-        <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-gray-200 bg-white">
-          <table className="min-w-full divide-y divide-gray-200 whitespace-nowrap text-sm">
-            <thead className="bg-gray-50 text-left text-xs uppercase text-gray-500">
-              <tr>
-                <th className="px-3 py-3">Order no.</th>
-                <th className="px-3 py-3">Karigar</th>
-                <th className="px-3 py-3">Ornament</th>
-                <th className="px-3 py-3">Status</th>
-                <th className="px-3 py-3">Issued</th>
-                <th className="px-3 py-3">Received</th>
-                <th className="px-3 py-3">Wastage</th>
-                {isStaff && <th className="px-3 py-3"></th>}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {items.map((o) => (
-                <tr key={o.id}>
-                  <td className="px-3 py-3 font-medium">{o.order_number || `#${o.id}`}</td>
-                  <td className="px-3 py-3">{o.karigar_name}</td>
-                  <td className="px-3 py-3 text-gray-600">{o.ornament_name || "—"}</td>
-                  <td className="px-3 py-3"><Badge tone={o.status === "completed" ? "green" : o.status === "cancelled" ? "red" : "blue"}>{o.status}</Badge></td>
-                  <td className="px-3 py-3">{formatGrams(o.net_issued)}</td>
-                  <td className="px-3 py-3">{formatGrams(o.net_received)}</td>
-                  <td className="px-3 py-3 font-medium">{formatGrams(o.wastage)}</td>
-                  {isStaff && (
-                    <td className="px-3 py-3 text-right">
-                      <button className="text-gray-400 hover:text-brand-600" onClick={() => setEditing(o)}>
-                        <Pencil size={15} />
-                      </button>
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {editing && (
-        <OrderForm order={editing} karigars={karigars} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); refresh(); }} />
-      )}
-    </div>
-  );
-}
-
-function OrderForm({ order, karigars, onClose, onSaved }) {
-  const isEdit = Boolean(order.id);
-  const { register, handleSubmit } = useForm({
-    defaultValues: {
-      order_number: order.order_number ?? "",
-      karigar: order.karigar ?? "",
-      ornament: order.ornament ?? "",
-      status: order.status ?? "open",
-      remarks: order.remarks ?? "",
-    },
-  });
-  const { data: ornData } = useFetch("/ornaments/", { page_size: 200 });
-  const [error, setError] = useState("");
-  const ornaments = ornData?.results ?? [];
-
-  const onSubmit = async (v) => {
-    setError("");
-    const payload = {
-      order_number: v.order_number || null,
-      karigar: v.karigar,
-      ornament: v.ornament || null,
-      status: v.status,
-      remarks: v.remarks || "",
-    };
-    try {
-      if (isEdit) await api.patch(`/orders/${order.id}/`, payload);
-      else await api.post("/orders/", payload);
-      onSaved();
-    } catch (e) {
-      setError(apiError(e));
-    }
-  };
-
-  return (
-    <Modal open onClose={onClose} title={isEdit ? "Edit order" : "New order"} wide>
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-        {error && <ErrorState message={error} />}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Order number (optional)">
-            <input className="input" {...register("order_number")} />
-          </Field>
-          <Field label="Karigar" required>
-            <select className="input" {...register("karigar", { required: true })}>
-              <option value="">Select…</option>
-              {karigars.map((k) => <option key={k.id} value={k.id}>{k.full_name}</option>)}
-            </select>
-          </Field>
-        </div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Ornament (optional)">
-            <select className="input" {...register("ornament")}>
-              <option value="">—</option>
-              {ornaments.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
-            </select>
-          </Field>
-          <Field label="Status">
-            <select className="input" {...register("status")}>
-              <option value="open">Open</option>
-              <option value="completed">Completed</option>
-              <option value="cancelled">Cancelled</option>
-            </select>
-          </Field>
-        </div>
-        <Field label="Remarks">
-          <textarea className="input" rows={2} {...register("remarks")} />
-        </Field>
-        <div className="flex justify-end gap-2 pt-2">
-          <button type="button" className="btn-secondary" onClick={onClose}>Cancel</button>
-          <button type="submit" className="btn-primary">Save</button>
         </div>
       </form>
     </Modal>

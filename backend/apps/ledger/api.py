@@ -1,9 +1,9 @@
-"""Ledger API: karigars, ornaments, orders, gold & cash entries, self-view.
+"""Ledger API: karigars, ornaments, gold & cash entries, self-view.
 
 Permissions:
   * Owner/manager: full access within their shop.
-  * Karigar: read-only, scoped to their own rows (orders/gold/cash). No access
-    to the karigar roster or ornament management.
+  * Karigar: read-only, scoped to their own rows (gold/cash). No access to the
+    karigar roster or ornament management.
 """
 
 import re
@@ -19,12 +19,14 @@ from ninja.files import UploadedFile
 from ninja.pagination import paginate
 
 from apps.accounts.models import Role
-from apps.common.auth import require_staff
+from apps.common.auth import require_owner, require_staff
 from apps.common.pagination import DefaultPagination
 
 from .history import build_changelog
-from .models import CashEntry, Direction, GoldEntry, KarigarProfile, Order, Ornament
+from .models import CashEntry, Direction, GoldEntry, KarigarProfile, Ornament
 from .schemas import (
+    ArchiveImpact,
+    ArchiveIn,
     CashEntryIn,
     CashEntryOut,
     CashEntryPatch,
@@ -36,9 +38,6 @@ from .schemas import (
     KarigarCreateOut,
     KarigarOut,
     KarigarUpdateForm,
-    OrderIn,
-    OrderOut,
-    OrderPatch,
     OrnamentIn,
     OrnamentOut,
     OrnamentPatch,
@@ -77,17 +76,15 @@ GOLD_ORDER_FIELDS = {"entry_date", "gross_weight_g", "net_weight_g", "carat", "o
 CASH_ORDER_FIELDS = {"entry_date", "amount_npr"}
 
 
-def _filter_gold(qs, karigar, direction, carat, order, order_number, date_from, date_to, search):
+def _filter_gold(qs, karigar, direction, carat, order_number, date_from, date_to, search):
     if karigar:
         qs = qs.filter(karigar_id=karigar)
     if direction:
         qs = qs.filter(direction=direction)
     if carat:
         qs = qs.filter(carat=carat)
-    if order:
-        qs = qs.filter(order_id=order)
     if order_number:
-        qs = qs.filter(order__order_number__icontains=order_number)
+        qs = qs.filter(order_number__icontains=order_number)
     if date_from:
         qs = qs.filter(entry_date__gte=date_from)
     if date_to:
@@ -102,19 +99,19 @@ def _filter_gold(qs, karigar, direction, carat, order, order_number, date_from, 
             Q(_gross__icontains=search)
             | Q(_net__icontains=search)
             | Q(ornament__name__icontains=search)
-            | Q(order__order_number__icontains=search)
+            | Q(order_number__icontains=search)
             | Q(remarks__icontains=search)
         )
     return qs
 
 
-def _filter_cash(qs, karigar, direction, order, date_from, date_to, search):
+def _filter_cash(qs, karigar, direction, order_number, date_from, date_to, search):
     if karigar:
         qs = qs.filter(karigar_id=karigar)
     if direction:
         qs = qs.filter(direction=direction)
-    if order:
-        qs = qs.filter(order_id=order)
+    if order_number:
+        qs = qs.filter(order_number__icontains=order_number)
     if date_from:
         qs = qs.filter(entry_date__gte=date_from)
     if date_to:
@@ -122,10 +119,75 @@ def _filter_cash(qs, karigar, direction, order, date_from, date_to, search):
     if search:
         qs = qs.annotate(_amt=Cast("amount_npr", CharField())).filter(
             Q(_amt__icontains=search)
-            | Q(order__order_number__icontains=search)
+            | Q(order_number__icontains=search)
             | Q(remarks__icontains=search)
         )
     return qs
+
+
+# ---------------------------------------------------------------------------
+# Archive
+#
+# Ledger entries are archived, never deleted — except by an owner, from the
+# archive. See ledger.models.ArchivableEntry.
+# ---------------------------------------------------------------------------
+class _Rollback(Exception):
+    """Escape hatch used to unwind the simulated archive below."""
+
+
+def _entry_source(model, archived):
+    """Live entries by default; the Archive page opts into the unfiltered
+    manager and narrows to archived rows."""
+    if archived:
+        return model.all_objects.filter(archived_at__isnull=False)
+    return model.objects.all()
+
+
+def _archived_or_404(model, request, pk):
+    """Look up through the UNFILTERED manager, so archived rows stay reachable
+    for restore and delete."""
+    entry = model.all_objects.filter(shop=_shop(request), pk=pk).first()
+    if not entry:
+        raise HttpError(404, f"{model.__name__} not found.")
+    return entry
+
+
+def _entry_label(entry):
+    kind = entry.get_direction_display().split(" ")[0]
+    if isinstance(entry, GoldEntry):
+        return f"{kind} {entry.net_weight_g}g ({entry.carat}kt)"
+    return f"{kind} NPR {entry.amount_npr}"
+
+
+def _balance_of(entry):
+    k = entry.karigar
+    return str(k.gold_balance() if isinstance(entry, GoldEntry) else k.cash_balance())
+
+
+def _archive_impact(entry, user):
+    """What archiving this entry will change: the karigar's balance.
+
+    Rather than re-deriving the effect — and risking a preview that says one
+    thing while the archive does another — this performs the archive inside a
+    savepoint, reads the resulting balance, then unwinds it. The preview is the
+    outcome, by construction.
+    """
+    before_balance = _balance_of(entry)
+    try:
+        with transaction.atomic():
+            entry.archive(user)
+            after_balance = _balance_of(type(entry).all_objects.get(pk=entry.pk))
+            raise _Rollback
+    except _Rollback:
+        pass
+    entry.refresh_from_db()
+
+    return {
+        "entry_label": _entry_label(entry),
+        "karigar_name": entry.karigar.full_name,
+        "balance_before": before_balance,
+        "balance_after": after_balance,
+    }
 
 
 def _dr_cr_totals(qs, field):
@@ -162,7 +224,7 @@ def _generate_password():
 
 
 # FK fields arrive as integer PKs from the schemas; assign them via ``<field>_id``.
-_FK_FIELDS = {"karigar", "order", "ornament"}
+_FK_FIELDS = {"karigar", "ornament"}
 
 
 def _assign(instance, data):
@@ -368,77 +430,30 @@ def my_profile(request):
 
 
 # ===========================================================================
-# Orders (staff write; karigar read own)
-# ===========================================================================
-@router.get("/orders/", response=list[OrderOut])
-@paginate(DefaultPagination)
-def list_orders(request, karigar: int | None = None, status: str | None = None,
-                order_number: str | None = None, ornament: int | None = None):
-    qs = _scope(request, Order.objects.select_related("karigar", "ornament").with_totals())
-    if karigar:
-        qs = qs.filter(karigar_id=karigar)
-    if status:
-        qs = qs.filter(status=status)
-    if ornament:
-        qs = qs.filter(ornament_id=ornament)
-    if order_number:
-        qs = qs.filter(order_number__icontains=order_number)
-    return qs
-
-
-@router.post("/orders/", response={201: OrderOut})
-def create_order(request, payload: OrderIn):
-    require_staff(request)
-    _karigar_in_shop(request, payload.karigar)
-    order = Order(shop=_shop(request), created_by=request.auth, updated_by=request.auth)
-    _assign(order, payload.dict())
-    order.save()
-    return 201, order
-
-
-@router.get("/orders/{oid}/", response=OrderOut)
-def get_order(request, oid: int):
-    return _scoped_or_404(request, Order, oid)
-
-
-@router.patch("/orders/{oid}/", response=OrderOut)
-def update_order(request, oid: int, payload: OrderPatch):
-    require_staff(request)
-    order = _get_or_404(Order, request, oid)
-    _assign(order, payload.dict(exclude_unset=True))
-    order.updated_by = request.auth
-    order.save()
-    return order
-
-
-@router.get("/orders/{oid}/history/", response=list[HistoryOut])
-def order_history(request, oid: int):
-    return build_changelog(_scoped_or_404(request, Order, oid))
-
-
-# ===========================================================================
 # Gold entries (staff write; karigar read own)
 # ===========================================================================
 @router.get("/gold-entries/", response=list[GoldEntryOut])
 @paginate(DefaultPagination)
 def list_gold(request, karigar: int | None = None, direction: str | None = None,
-              carat: int | None = None, order: int | None = None,
-              order_number: str | None = None, date_from: str | None = None,
+              carat: int | None = None, order_number: str | None = None,
+              date_from: str | None = None,
               date_to: str | None = None, ordering: str | None = None,
-              search: str | None = None):
-    qs = _scope(request, GoldEntry.objects.select_related("karigar", "ornament", "order"))
-    qs = _filter_gold(qs, karigar, direction, carat, order, order_number, date_from, date_to, search)
+              search: str | None = None, archived: bool = False):
+    qs = _scope(request, _entry_source(GoldEntry, archived).select_related(
+        "karigar", "ornament", "archived_by"))
+    qs = _filter_gold(qs, karigar, direction, carat, order_number, date_from, date_to, search)
     return _order_by(qs, ordering, GOLD_ORDER_FIELDS, "-entry_date")
 
 
 @router.get("/gold-entries/summary/")
 def gold_summary(request, karigar: int | None = None, direction: str | None = None,
-                 carat: int | None = None, order: int | None = None,
-                 order_number: str | None = None, date_from: str | None = None,
-                 date_to: str | None = None, search: str | None = None):
+                 carat: int | None = None, order_number: str | None = None,
+                 date_from: str | None = None,
+                 date_to: str | None = None, search: str | None = None,
+                 archived: bool = False):
     """Full-filtered-set aggregates so ledger totals stay correct across pages."""
-    qs = _scope(request, GoldEntry.objects.all())
-    qs = _filter_gold(qs, karigar, direction, carat, order, order_number, date_from, date_to, search)
+    qs = _scope(request, _entry_source(GoldEntry, archived))
+    qs = _filter_gold(qs, karigar, direction, carat, order_number, date_from, date_to, search)
     dr, cr = _dr_cr_totals(qs, "net_weight_g")
     return {"count": qs.count(), "total_dr": dr, "total_cr": cr}
 
@@ -482,9 +497,44 @@ def set_gold_photo(request, eid: int, photo: UploadedFile = File(...)):
     return entry
 
 
+@router.get("/gold-entries/{eid}/archive-impact/", response=ArchiveImpact)
+def goldentry_archive_impact(request, eid: int):
+    """Preview shown in the confirm dialog before archiving."""
+    require_staff(request)
+    return _archive_impact(_get_or_404(GoldEntry, request, eid), request.auth)
+
+
+@router.post("/gold-entries/{eid}/archive/", response=GoldEntryOut)
+def archive_goldentry(request, eid: int, payload: ArchiveIn):
+    require_staff(request)
+    entry = _get_or_404(GoldEntry, request, eid)
+    entry.archive(request.auth, payload.reason)
+    return entry
+
+
+@router.post("/gold-entries/{eid}/restore/", response=GoldEntryOut)
+def restore_goldentry(request, eid: int):
+    require_staff(request)
+    entry = _archived_or_404(GoldEntry, request, eid)
+    entry.restore(request.auth)
+    return entry
+
+
+@router.delete("/gold-entries/{eid}/", response={204: None})
+def delete_goldentry(request, eid: int):
+    """Permanent, owner only, and only from the archive — so destroying a
+    ledger entry always takes a deliberate two-step."""
+    require_owner(request)
+    entry = _archived_or_404(GoldEntry, request, eid)
+    if not entry.is_archived:
+        raise HttpError(400, "Archive the entry first, then delete it from the archive.")
+    entry.delete()
+    return 204, None
+
+
 @router.get("/gold-entries/{eid}/history/", response=list[HistoryOut])
 def gold_history(request, eid: int):
-    return build_changelog(_scoped_or_404(request, GoldEntry, eid))
+    return build_changelog(_scoped_or_404(request, GoldEntry, eid, include_archived=True))
 
 
 # ===========================================================================
@@ -493,20 +543,22 @@ def gold_history(request, eid: int):
 @router.get("/cash-entries/", response=list[CashEntryOut])
 @paginate(DefaultPagination)
 def list_cash(request, karigar: int | None = None, direction: str | None = None,
-              order: int | None = None, date_from: str | None = None,
+              order_number: str | None = None, date_from: str | None = None,
               date_to: str | None = None, ordering: str | None = None,
-              search: str | None = None):
-    qs = _scope(request, CashEntry.objects.select_related("karigar", "order"))
-    qs = _filter_cash(qs, karigar, direction, order, date_from, date_to, search)
+              search: str | None = None, archived: bool = False):
+    qs = _scope(request, _entry_source(CashEntry, archived).select_related(
+        "karigar", "archived_by"))
+    qs = _filter_cash(qs, karigar, direction, order_number, date_from, date_to, search)
     return _order_by(qs, ordering, CASH_ORDER_FIELDS, "-entry_date")
 
 
 @router.get("/cash-entries/summary/")
 def cash_summary(request, karigar: int | None = None, direction: str | None = None,
-                 order: int | None = None, date_from: str | None = None,
-                 date_to: str | None = None, search: str | None = None):
-    qs = _scope(request, CashEntry.objects.all())
-    qs = _filter_cash(qs, karigar, direction, order, date_from, date_to, search)
+                 order_number: str | None = None, date_from: str | None = None,
+                 date_to: str | None = None, search: str | None = None,
+                 archived: bool = False):
+    qs = _scope(request, _entry_source(CashEntry, archived))
+    qs = _filter_cash(qs, karigar, direction, order_number, date_from, date_to, search)
     dr, cr = _dr_cr_totals(qs, "amount_npr")
     return {"count": qs.count(), "total_dr": dr, "total_cr": cr}
 
@@ -536,15 +588,51 @@ def update_cash(request, eid: int, payload: CashEntryPatch):
     return entry
 
 
+@router.get("/cash-entries/{eid}/archive-impact/", response=ArchiveImpact)
+def cashentry_archive_impact(request, eid: int):
+    """Preview shown in the confirm dialog before archiving."""
+    require_staff(request)
+    return _archive_impact(_get_or_404(CashEntry, request, eid), request.auth)
+
+
+@router.post("/cash-entries/{eid}/archive/", response=CashEntryOut)
+def archive_cashentry(request, eid: int, payload: ArchiveIn):
+    require_staff(request)
+    entry = _get_or_404(CashEntry, request, eid)
+    entry.archive(request.auth, payload.reason)
+    return entry
+
+
+@router.post("/cash-entries/{eid}/restore/", response=CashEntryOut)
+def restore_cashentry(request, eid: int):
+    require_staff(request)
+    entry = _archived_or_404(CashEntry, request, eid)
+    entry.restore(request.auth)
+    return entry
+
+
+@router.delete("/cash-entries/{eid}/", response={204: None})
+def delete_cashentry(request, eid: int):
+    """Permanent, owner only, and only from the archive — so destroying a
+    ledger entry always takes a deliberate two-step."""
+    require_owner(request)
+    entry = _archived_or_404(CashEntry, request, eid)
+    if not entry.is_archived:
+        raise HttpError(400, "Archive the entry first, then delete it from the archive.")
+    entry.delete()
+    return 204, None
+
+
 @router.get("/cash-entries/{eid}/history/", response=list[HistoryOut])
 def cash_history(request, eid: int):
-    return build_changelog(_scoped_or_404(request, CashEntry, eid))
+    return build_changelog(_scoped_or_404(request, CashEntry, eid, include_archived=True))
 
 
-def _scoped_or_404(request, model, pk):
+def _scoped_or_404(request, model, pk, include_archived=False):
     """Fetch honouring shop + karigar scoping (used for GET/history)."""
     field = "karigar"
-    obj = _scope(request, model.objects.all(), field).filter(pk=pk).first()
+    manager = model.all_objects if include_archived else model.objects
+    obj = _scope(request, manager.all(), field).filter(pk=pk).first()
     if not obj:
         raise HttpError(404, f"{model.__name__} not found.")
     return obj

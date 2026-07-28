@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useForm, useWatch } from "react-hook-form";
 import DateInput from "../components/DateInput";
-import { ArrowUpRight, ArrowDownLeft, Pencil } from "lucide-react";
+import { ArrowUpRight, ArrowDownLeft, Pencil, Archive } from "lucide-react";
+import ArchiveDialog from "../components/ArchiveDialog";
 import api, { apiError } from "../lib/api";
 import { useFetch } from "../hooks/useFetch";
 import { PageHeader, Spinner, EmptyState, ErrorState, Modal, Field, SortableTh, STICKY_TH } from "../components/ui";
@@ -35,6 +36,7 @@ export default function Cash() {
   const summary = useFetch("/cash-entries/summary/", summaryParams);
   const { data: karigarData } = useFetch("/karigars/", isStaff ? { page_size: 200 } : null);
   const [entry, setEntry] = useState(null);
+  const [archiving, setArchiving] = useState(null);
   const karigars = karigarData?.results ?? [];
   const items = data?.results ?? [];
   const count = data?.count ?? 0;
@@ -68,18 +70,18 @@ export default function Cash() {
   const totalCredit = sumCr + (selected && !openingInDr ? openingAbs : 0);
   const cashClosing = selected ? Number(selected.cash_balance) : sumDr - sumCr;
 
-  // Sticky-cell classes + summary rows (cols: Date, Karigar, Debit, Credit, Remarks, [action]).
+  // Sticky-cell classes + summary rows (cols: Date, Karigar, Debit, Credit, Order, Remarks, [action]).
   const openTd = "sticky top-10 z-10 h-10 whitespace-nowrap border-b border-amber-200 bg-amber-50 px-3 font-semibold text-gray-800";
   const bodyTd = "whitespace-nowrap border-b border-gray-100 px-3 py-2.5";
   const footTd = "sticky z-20 h-10 whitespace-nowrap border-t border-amber-200 bg-amber-50 px-3 font-semibold text-gray-800";
   const totalBottom = selected ? "bottom-10" : "bottom-0";
   const act = isStaff ? [""] : [];
   const openingCells = ["Opening", selected?.full_name ?? "",
-    openingInDr ? formatAmount(openingAbs) : "", !openingInDr ? formatAmount(openingAbs) : "", "", ...act];
+    openingInDr ? formatAmount(openingAbs) : "", !openingInDr ? formatAmount(openingAbs) : "", "", "", ...act];
   const totalCells = [`Total (${summary.data?.count ?? count})`, "",
-    formatAmount(totalDebit), formatAmount(totalCredit), "", ...act];
+    formatAmount(totalDebit), formatAmount(totalCredit), "", "", ...act];
   const closingCells = [`Closing (${cashClosing >= 0 ? "Dr" : "Cr"})`, "",
-    cashClosing >= 0 ? formatAmount(cashClosing) : "", cashClosing < 0 ? formatAmount(-cashClosing) : "", "", ...act];
+    cashClosing >= 0 ? formatAmount(cashClosing) : "", cashClosing < 0 ? formatAmount(-cashClosing) : "", "", "", ...act];
 
   return (
     <div className="flex h-full flex-col">
@@ -144,6 +146,7 @@ export default function Cash() {
                 <th className={STICKY_TH}>Karigar</th>
                 <SortableTh label={<>Debit{NPR}</>} field="amount_npr" ordering={ordering} onSort={sort} />
                 <SortableTh label={<>Credit{NPR}</>} field="amount_npr" ordering={ordering} onSort={sort} />
+                <th className={STICKY_TH}>Order</th>
                 <th className={STICKY_TH}>Remarks</th>
                 {isStaff && <th className={STICKY_TH}></th>}
               </tr>
@@ -158,12 +161,18 @@ export default function Cash() {
                   <td className={bodyTd}>{e.karigar_name}</td>
                   <td className={`${bodyTd} font-medium text-dr`}>{e.direction === "dr" ? formatAmount(e.amount_npr) : ""}</td>
                   <td className={`${bodyTd} font-medium text-cr`}>{e.direction === "cr" ? formatAmount(e.amount_npr) : ""}</td>
+                  <td className={`${bodyTd} text-gray-600`}>{e.order_number || "—"}</td>
                   <td className={`${bodyTd} text-gray-500`}>{e.remarks || "—"}</td>
                   {isStaff && (
                     <td className={`${bodyTd} text-right`}>
-                      <button className="text-gray-400 hover:text-brand-600" onClick={() => setEntry(e)}>
+                      <div className="flex justify-end gap-1">
+                      <button className="p-1 text-gray-400 hover:text-brand-600" title="Edit entry" onClick={() => setEntry(e)}>
                         <Pencil size={15} />
                       </button>
+                      <button className="p-1 text-gray-400 hover:text-danger" title="Archive entry" onClick={() => setArchiving(e)}>
+                        <Archive size={15} />
+                      </button>
+                      </div>
                     </td>
                   )}
                 </tr>
@@ -177,6 +186,15 @@ export default function Cash() {
             </tfoot>
           </table>
         </div>
+      )}
+
+      {archiving && (
+        <ArchiveDialog
+          kind="cash"
+          entry={archiving}
+          onClose={() => setArchiving(null)}
+          onDone={() => { setArchiving(null); refresh(); summary.refresh(); }}
+        />
       )}
 
       {entry && (
@@ -199,6 +217,7 @@ function CashEntryForm({ entry, karigars, onClose, onSaved }) {
     defaultValues: {
       karigar: entry.karigar ?? "",
       amount_npr: entry.amount_npr ?? "",
+      order_number: entry.order_number ?? "",
       remarks: entry.remarks ?? "",
       entry_date: entry.entry_date ?? new Date().toISOString().slice(0, 10),
     },
@@ -212,6 +231,7 @@ function CashEntryForm({ entry, karigars, onClose, onSaved }) {
       karigar: v.karigar,
       direction,
       amount_npr: v.amount_npr,
+      order_number: v.order_number || "",
       remarks: v.remarks || "",
       entry_date: v.entry_date,
     };
@@ -245,6 +265,12 @@ function CashEntryForm({ entry, karigars, onClose, onSaved }) {
               onChange={(v) => setValue("entry_date", v)} />
           </Field>
         </div>
+        {/* Just the number written on the paperwork — a label on this entry,
+            not a link to anything. */}
+        <Field label="Order number (optional)">
+          <input className="input" placeholder="e.g. ORD-1002" {...register("order_number")} />
+        </Field>
+
         <Field label="Remarks">
           <textarea className="input" rows={2} {...register("remarks")} />
         </Field>

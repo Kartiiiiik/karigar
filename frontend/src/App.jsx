@@ -12,6 +12,7 @@ import Managers from "./pages/Managers";
 import Settings from "./pages/Settings";
 import Reports from "./pages/Reports";
 import Backups from "./pages/Backups";
+import Archive from "./pages/Archive";
 import Bandaki from "./pages/Bandaki";
 import NotFound from "./pages/NotFound";
 
@@ -44,6 +45,7 @@ export default function App() {
         <Route path="bandaki" element={<ProtectedRoute roles={["owner"]}><Bandaki /></ProtectedRoute>} />
         <Route path="settings" element={<Staff><Settings /></Staff>} />
         <Route path="backups" element={<Staff><Backups /></Staff>} />
+        <Route path="archive" element={<Staff><Archive /></Staff>} />
       </Route>
 
       <Route path="*" element={<NotFound />} />

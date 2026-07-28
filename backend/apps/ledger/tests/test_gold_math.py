@@ -70,21 +70,4 @@ def test_cash_balance_signed_dr_cr(shop, karigar_profile, owner):
     assert karigar_profile.cash_balance() == Decimal("3000.00")
 
 
-@pytest.mark.django_db
-def test_order_wastage(shop, karigar_profile, ornament, owner):
-    from apps.ledger.models import Order
 
-    order = Order.objects.create(shop=shop, karigar=karigar_profile, created_by=owner)
-    GoldEntry.objects.create(
-        shop=shop, order=order, karigar=karigar_profile, direction=Direction.DR,
-        gross_weight_g=Decimal("20.000"), carat=24,
-        entry_date=datetime.date(2024, 3, 1), created_by=owner,
-    )
-    GoldEntry.objects.create(
-        shop=shop, order=order, karigar=karigar_profile, direction=Direction.CR,
-        gross_weight_g=Decimal("19.500"), carat=24, ornament=ornament,
-        entry_date=datetime.date(2024, 3, 5), created_by=owner,
-    )
-    assert order.net_issued() == Decimal("20.000")
-    assert order.net_received() == Decimal("19.500")
-    assert order.wastage() == Decimal("0.500")

@@ -111,9 +111,6 @@ function StaffHome({ user }) {
   const { data: karigarData } = useFetch("/karigars/", { page_size: 200 });
   const karigars = karigarData?.results ?? [];
 
-  const totalGold = karigars.reduce((s, k) => s + Number(k.gold_balance || 0), 0);
-  const totalCash = karigars.reduce((s, k) => s + Number(k.cash_balance || 0), 0);
-
   return (
     <div className="space-y-6">
       <div>
@@ -157,13 +154,6 @@ function StaffHome({ user }) {
                   </tr>
                 ))}
               </tbody>
-              <tfoot className="border-t-2 border-gray-200">
-                <tr className="font-semibold text-gray-800">
-                  <td className="py-2">Totals ({karigars.length})</td>
-                  <td className="py-2"><DrCrBadge label={formatGoldBalance(totalGold)} /></td>
-                  <td className="py-2"><DrCrBadge label={formatCashBalance(totalCash)} /></td>
-                </tr>
-              </tfoot>
             </table>
           </div>
         )}

@@ -1,20 +1,32 @@
 // Display helpers for money, gold weight, and signed Dr/Cr balances.
 
-const npr = new Intl.NumberFormat("en-IN", {
+const nprWhole = new Intl.NumberFormat("en-IN", {
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 0,
+});
+
+const nprPaisa = new Intl.NumberFormat("en-IN", {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
 });
 
-/** Format an NPR amount, e.g. 12500 -> "NPR 12,500.00". */
-export function formatNpr(value) {
-  const n = Number(value ?? 0);
-  return `NPR ${npr.format(n)}`;
+// Whole rupee amounts read cleaner without a trailing ".00", but once paisa
+// are involved we always show both digits — "17,500" / "17,500.50", never
+// "17,500.5". Round first so 17500.001 counts as whole.
+function money(value) {
+  const n = Math.round(Number(value ?? 0) * 100) / 100;
+  return Number.isInteger(n) ? nprWhole.format(n) : nprPaisa.format(n);
 }
 
-/** Amount only (no NPR prefix), e.g. 12500 -> "12,500.00". For table cells
- * where the unit lives in the column header. */
+/** Format an NPR amount, e.g. 12500 -> "NPR 12,500", 12500.5 -> "NPR 12,500.50". */
+export function formatNpr(value) {
+  return `NPR ${money(value)}`;
+}
+
+/** Amount only (no NPR prefix), e.g. 12500 -> "12,500", 12500.5 -> "12,500.50".
+ * For table cells where the unit lives in the column header. */
 export function formatAmount(value) {
-  return npr.format(Number(value ?? 0));
+  return money(value);
 }
 
 /** Format grams to 3dp, e.g. "9.167 g". */

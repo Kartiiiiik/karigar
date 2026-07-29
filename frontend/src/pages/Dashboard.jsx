@@ -5,7 +5,7 @@ import {
 import { useFetch } from "../hooks/useFetch";
 import { useAuthStore } from "../store/auth";
 import { DrCrBadge } from "../components/ui";
-import { formatGoldBalance, formatCashBalance } from "../lib/format";
+import { formatGoldBalance, formatCashBalance, formatNpr } from "../lib/format";
 
 // Quick-access action tile. `tone` tints by money direction:
 // amber = out/given (Dr), green = in/received (Cr), gray = neutral.
@@ -93,7 +93,7 @@ function RecentList({ title, items, link, empty, isCash }) {
               <span className="text-gray-500">{e.entry_date}</span>
               <span className="capitalize">{e.direction === "dr" ? "Given" : "Received"}</span>
               <span className="font-medium">
-                {isCash ? `NPR ${Number(e.amount_npr).toLocaleString()}` : `${Number(e.net_weight_g).toFixed(3)} g`}
+                {isCash ? formatNpr(e.amount_npr) : `${Number(e.net_weight_g).toFixed(3)} g`}
               </span>
             </li>
           ))}

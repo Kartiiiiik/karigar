@@ -15,7 +15,14 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.accounts.models import AppSetting, CalendarPreference, Role, Shop, User
-from apps.bandaki.models import BandakiCustomer, BandakiLoan, InterestPeriod
+from apps.bandaki.models import (
+    BandakiCustomer,
+    BandakiItem,
+    BandakiLoan,
+    BandakiPayment,
+    InterestPeriod,
+    settle,
+)
 from apps.ledger.models import (
     CashEntry,
     Direction,
@@ -289,9 +296,10 @@ class Command(BaseCommand):
                 interest_rate=rate,
                 interest_period=period,
                 remarks=rng.choice(BANDAKI_REMARKS),
-                # A fifth are already repaid/closed, so the active filter and the
-                # history view both have material.
-                is_active=rng.random() >= 0.2,
+                # Every loan starts running. Which ones end up closed is decided
+                # by the repayments seeded below, so a "Closed" badge in the demo
+                # always has the payment history to back it up.
+                is_active=True,
                 created_by=owner,
                 updated_by=owner,
             )
@@ -299,3 +307,110 @@ class Command(BaseCommand):
             self.stdout.write(f"Bandaki loans added: {loans_needed}")
         else:
             self.stdout.write("Bandaki loans already at target.")
+
+        self._bandaki_items(shop, owner, rng)
+        self._bandaki_payments(shop, owner, rng)
+
+    def _bandaki_items(self, shop, owner, rng):
+        """Seed the gold pledged against each loan.
+
+        Weight is scaled to the amount lent — a shop lends roughly in
+        proportion to the metal it is holding — so the demo doesn't show
+        3 grams securing a three-lakh loan.
+
+        Idempotent: a loan that already has pieces is left alone.
+        """
+        ornaments = list(Ornament.objects.filter(shop=shop, is_active=True))
+        if not ornaments:
+            self.stdout.write("Bandaki items skipped: no ornaments.")
+            return
+
+        made = 0
+        for loan in BandakiLoan.objects.filter(shop=shop).prefetch_related("items"):
+            if loan.items.all():
+                continue
+            # ~1 g of 22kt per NPR 9,000 lent, jittered so rows aren't uniform.
+            budget = (loan.gross_amount / Decimal("9000")) * Decimal(
+                f"{rng.uniform(0.85, 1.25):.3f}"
+            )
+            pieces = rng.randint(1, 3)
+            for n in range(pieces):
+                # Split the weight across the pieces, last one takes the rest.
+                share = budget / pieces if n < pieces - 1 else budget - (budget / pieces) * n
+                grams = max(Decimal("0.500"), share).quantize(Decimal("0.001"))
+                BandakiItem(
+                    shop=shop, loan=loan,
+                    ornament=rng.choice(ornaments),
+                    quantity=rng.choice([1, 1, 1, 2]),
+                    gross_weight_g=grams,
+                    carat=rng.choice([22, 22, 22, 24]),
+                    created_by=owner, updated_by=owner,
+                ).save()
+                made += 1
+        self.stdout.write(f"Bandaki pledged items added: {made}")
+
+    def _bandaki_payments(self, shop, owner, rng):
+        """Seed repayments against the loans that don't have any yet.
+
+        Amounts are drawn from what the loan actually owed *on the day of the
+        payment* — computed with the same walk the app uses — so the demo never
+        contains a payment larger than the debt it was settling.
+
+        Idempotent: a loan with payments already is left alone.
+        """
+        today = timezone.localdate()
+        loans = (
+            BandakiLoan.objects.filter(shop=shop, is_active=True)
+            .prefetch_related("payments")
+            .order_by("pk")
+        )
+        made = closed = 0
+
+        for loan in loans:
+            if loan.payments.all():
+                continue
+            span = (today - loan.loan_date).days
+            if span < 10:
+                continue  # too fresh to have been paid against
+
+            roll = rng.random()
+            if roll < 0.40:
+                continue                       # 40% untouched — still owing in full
+            pay_off = roll > 0.80              # 20% settled outright
+            instalments = 1 if pay_off else rng.randint(1, 3)
+
+            # Strictly increasing payment dates inside the loan's lifetime.
+            days = sorted(rng.sample(range(5, span + 1), min(instalments, span - 4)))
+            rows = []
+            for n, day in enumerate(days):
+                when = loan.loan_date + datetime.timedelta(days=day)
+                owed = settle(
+                    loan.gross_amount, loan.interest_rate, loan.interest_period,
+                    loan.loan_date, rows, when,
+                ).outstanding
+                if owed <= 0:
+                    break
+                last = n == len(days) - 1
+                if pay_off and last:
+                    amount = owed                       # clears it exactly
+                else:
+                    share = Decimal(f"{rng.uniform(0.15, 0.55):.4f}")
+                    amount = (owed * share).quantize(Decimal("1"))
+                    amount = min(max(amount, Decimal("500")), owed)
+                rows.append(
+                    BandakiPayment(
+                        shop=shop, loan=loan, payment_date=when, amount=amount,
+                        remarks="Part payment" if not (pay_off and last) else "Loan cleared",
+                        created_by=owner, updated_by=owner,
+                    )
+                )
+
+            for row in rows:
+                row.save()
+            if rows:
+                made += len(rows)
+                # Re-read rather than refresh: sync_closure walks `payments`,
+                # and the loan in hand still carries the empty prefetch cache.
+                closed += int(BandakiLoan.objects.get(pk=loan.pk).sync_closure(owner))
+
+        self.stdout.write(f"Bandaki payments added: {made} ({closed} loans settled)")

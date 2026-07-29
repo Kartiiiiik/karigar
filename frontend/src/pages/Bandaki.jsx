@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { useForm, useWatch } from "react-hook-form";
-import { Plus, Pencil, UserPlus } from "lucide-react";
+import { useForm, useWatch, useFieldArray } from "react-hook-form";
+import { Plus, Pencil, UserPlus, HandCoins, Trash2 } from "lucide-react";
 import api, { apiError } from "../lib/api";
 import { useFetch } from "../hooks/useFetch";
 import {
-  PageHeader, Spinner, EmptyState, ErrorState, Modal, Field, Badge, SortableTh, STICKY_TH,
+  PageHeader, Spinner, EmptyState, ErrorState, Modal, Field, Badge, SortableTh,
+  STICKY_TH, STICKY_TH_RIGHT,
 } from "../components/ui";
 import DateInput from "../components/DateInput";
 import Select, { FormSelect } from "../components/Select";
-import { formatAmount } from "../lib/format";
+import { formatAmount, formatGramsValue } from "../lib/format";
 import { formatDate } from "../lib/date";
 import { useSettingsStore } from "../store/settings";
 
@@ -69,7 +70,12 @@ function Loans() {
   );
   const { data, loading, error, refresh } = useFetch("/bandaki/loans/", listParams);
   const { data: custData, refresh: refreshCustomers } = useFetch("/bandaki/customers/", { page_size: 1000 });
-  const [loan, setLoan] = useState(null);
+  // The shop's ornament list — shared with the gold receive-form.
+  const { data: ornData } = useFetch("/ornaments/", { page_size: 200 });
+  const ornaments = ornData?.results ?? [];
+  const [loan, setLoan] = useState(null);       // edit form
+  const [detail, setDetail] = useState(null);   // row clicked — payment history
+  const [paying, setPaying] = useState(null);   // receive-payment form
   const customers = custData?.results ?? [];
   const items = data?.results ?? [];
   const count = data?.count ?? 0;
@@ -92,20 +98,33 @@ function Loans() {
     (acc, l) => {
       acc.principal += Number(l.gross_amount);
       acc.interest += Number(l.interest_amount);
+      acc.paid += Number(l.total_paid ?? 0);
       acc.total += Number(l.total_amount);
       return acc;
     },
-    { principal: 0, interest: 0, total: 0 },
+    { principal: 0, interest: 0, paid: 0, total: 0 },
   );
 
-  // Sticky-cell classes + total-row cells (cols: Date, Customer, Principal,
-  // Rate, Days, Interest, Total, Remarks, action).
-  const bodyTd = "whitespace-nowrap border-b border-gray-100 px-3 py-2.5";
+  // Sticky-cell classes + total-row cells. Columns: Date, Customer, Lent,
+  // Rate, Interest, Paid, Outstanding, Remarks, action — money right-aligned
+  // so the digits line up down the column.
+  const bodyTd = "whitespace-nowrap border-b border-gray-100 px-3 py-2";
+  const numTd = `${bodyTd} text-right tabular-nums`;
   const footTd = "sticky bottom-0 z-20 h-10 whitespace-nowrap border-t border-amber-200 bg-amber-50 px-3 font-semibold text-gray-800";
   const totalCells = [
-    `Total (${count})`, "", formatAmount(totals.principal), "", "",
-    formatAmount(totals.interest), formatAmount(totals.total), "", "",
+    { v: `Total (${count})` },
+    { v: "" },
+    { v: formatAmount(totals.principal), num: true },
+    { v: "" },
+    { v: formatAmount(totals.interest), num: true },
+    { v: formatAmount(totals.paid), num: true },
+    { v: formatAmount(totals.total), num: true },
+    { v: "" },
+    { v: "" },
   ];
+
+  // A write from any of the three panels invalidates the row figures.
+  const afterWrite = () => refresh();
 
   return (
     <div className="flex h-full flex-col">
@@ -158,43 +177,84 @@ function Loans() {
               <tr>
                 <SortableTh label="Date" field="loan_date" ordering={ordering} onSort={sort} />
                 <SortableTh label="Customer" field="customer__name" ordering={ordering} onSort={sort} />
-                <SortableTh label={<>Principal{NPR}</>} field="gross_amount" ordering={ordering} onSort={sort} />
-                <SortableTh label="Rate" field="interest_rate" ordering={ordering} onSort={sort} />
-                <th className={STICKY_TH}>Days</th>
-                <th className={STICKY_TH}>Interest{NPR}</th>
-                <th className={STICKY_TH}>Total{NPR}</th>
+                <SortableTh label={<>Lent{NPR}</>} field="gross_amount" ordering={ordering} onSort={sort} align="right" />
+                <SortableTh label="Rate" field="interest_rate" ordering={ordering} onSort={sort} align="right" />
+                <th className={STICKY_TH_RIGHT}>Interest{NPR}</th>
+                <th className={STICKY_TH_RIGHT}>Paid{NPR}</th>
+                <th className={STICKY_TH_RIGHT}>Outstanding{NPR}</th>
                 <th className={STICKY_TH}>Remarks</th>
                 <th className={STICKY_TH}></th>
               </tr>
             </thead>
             <tbody>
               {items.map((l) => (
-                <tr key={l.id} className={`hover:bg-gray-50 ${l.is_active ? "" : "opacity-60"}`}>
-                  <td className={`${bodyTd} text-gray-600`}>{formatDate(l.loan_date, calendar, { format: dateFormat })}</td>
+                <tr
+                  key={l.id}
+                  className={`cursor-pointer hover:bg-gray-50 ${l.is_active ? "" : "opacity-60"}`}
+                  onClick={() => setDetail(l)}
+                  title="View payment history"
+                >
+                  {/* Date carries the elapsed days beneath it — same fact,
+                      one column instead of two. */}
+                  <td className={`${bodyTd} text-gray-600`}>
+                    {formatDate(l.loan_date, calendar, { format: dateFormat })}
+                    <span className="block text-xs text-gray-400">{l.days_elapsed} days</span>
+                  </td>
                   <td className={bodyTd}>
                     <span className="inline-flex items-center gap-2">
                       {l.customer_name}
                       {!l.is_active && <Badge tone="gray">Closed</Badge>}
                     </span>
+                    {l.payment_count > 0 && (
+                      <span className="block text-xs text-gray-400">
+                        {l.payment_count} payment{l.payment_count > 1 ? "s" : ""}
+                      </span>
+                    )}
                   </td>
-                  <td className={`${bodyTd} font-medium`}>{formatAmount(l.gross_amount)}</td>
-                  <td className={`${bodyTd} text-gray-600`}>
-                    {Number(l.interest_rate)}% <span className="text-gray-400">/{PERIOD_SHORT[l.interest_period]}</span>
+                  <td className={numTd}>{formatAmount(l.gross_amount)}</td>
+                  <td className={`${numTd} text-gray-600`}>
+                    {Number(l.interest_rate)}%
+                    <span className="block text-xs text-gray-400">
+                      per {PERIOD_SHORT[l.interest_period]}
+                    </span>
                   </td>
-                  <td className={`${bodyTd} text-gray-500`}>{l.days_elapsed}</td>
-                  <td className={`${bodyTd} font-medium text-dr`}>{formatAmount(l.interest_amount)}</td>
-                  <td className={`${bodyTd} font-semibold`}>{formatAmount(l.total_amount)}</td>
+                  <td className={`${numTd} text-dr`}>{formatAmount(l.interest_amount)}</td>
+                  <td className={`${numTd} text-cr`}>
+                    {Number(l.total_paid ?? 0) > 0 ? formatAmount(l.total_paid) : <span className="text-gray-300">—</span>}
+                  </td>
+                  <td className={`${numTd} font-semibold text-gray-900`}>{formatAmount(l.total_amount)}</td>
                   <td className={`${bodyTd} text-gray-500`}>{l.remarks || "—"}</td>
-                  <td className={`${bodyTd} text-right`}>
-                    <button className="text-gray-400 hover:text-brand-600" onClick={() => setLoan(l)}>
-                      <Pencil size={15} />
-                    </button>
+                  <td className={`${bodyTd} text-right`} onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center justify-end gap-1">
+                      {l.is_active && (
+                        <button
+                          className="rounded p-1 text-gray-400 hover:bg-green-50 hover:text-cr"
+                          title="Receive payment"
+                          onClick={() => setPaying(l)}
+                        >
+                          <HandCoins size={16} />
+                        </button>
+                      )}
+                      <button
+                        className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-brand-600"
+                        title="Edit loan"
+                        onClick={() => setLoan(l)}
+                      >
+                        <Pencil size={15} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
             </tbody>
             <tfoot>
-              <tr>{totalCells.map((c, i) => <td key={i} className={footTd}>{c}</td>)}</tr>
+              <tr>
+                {totalCells.map((c, i) => (
+                  <td key={i} className={`${footTd} ${c.num ? "text-right tabular-nums" : ""}`}>
+                    {c.v}
+                  </td>
+                ))}
+              </tr>
             </tfoot>
           </table>
         </div>
@@ -204,16 +264,522 @@ function Loans() {
         <LoanForm
           loan={loan}
           customers={customers}
+          ornaments={ornaments}
           refreshCustomers={refreshCustomers}
           onClose={() => setLoan(null)}
-          onSaved={() => { setLoan(null); refresh(); }}
+          onSaved={() => { setLoan(null); afterWrite(); }}
+        />
+      )}
+
+      {paying && (
+        <PaymentForm
+          loan={paying}
+          onClose={() => setPaying(null)}
+          onSaved={() => { setPaying(null); afterWrite(); }}
+        />
+      )}
+
+      {detail && (
+        <LoanDetail
+          loan={detail}
+          ornaments={ornaments}
+          onClose={() => setDetail(null)}
+          onChanged={afterWrite}
+        />
+      )}
+
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Receive payment
+// ---------------------------------------------------------------------------
+function PaymentForm({ loan, onClose, onSaved }) {
+  const calendar = useSettingsStore((s) => s.calendar);
+  const { register, handleSubmit, control, setValue } = useForm({
+    defaultValues: {
+      payment_date: new Date().toISOString().slice(0, 10),
+      amount: "",
+      remarks: "",
+    },
+  });
+  const paymentDate = useWatch({ control, name: "payment_date" });
+  const amount = useWatch({ control, name: "amount" });
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const outstanding = Number(loan.total_amount);
+  const interestDue = Number(loan.interest_amount);
+
+  // Mirror the backend waterfall so the owner can see where the money will
+  // land before committing. The server stays the authority.
+  const entered = Number(amount) || 0;
+  const toInterest = Math.min(entered, interestDue);
+  const toPrincipal = Math.max(0, Math.min(entered - toInterest, Number(loan.principal_outstanding)));
+  const remaining = Math.max(0, outstanding - entered);
+  const over = entered > outstanding;
+
+  const onSubmit = async (v) => {
+    setError("");
+    setSaving(true);
+    try {
+      await api.post(`/bandaki/loans/${loan.id}/payments/`, {
+        payment_date: v.payment_date,
+        amount: v.amount,
+        remarks: v.remarks || "",
+      });
+      onSaved();
+    } catch (e) {
+      setError(apiError(e));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal open onClose={onClose} title={`Receive payment — ${loan.customer_name}`}>
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        {error && <ErrorState message={error} />}
+
+        <div className="rounded-lg bg-gray-50 p-3 text-sm">
+          <SummaryRow label="Principal outstanding" value={loan.principal_outstanding} />
+          <SummaryRow label="Interest owed" value={loan.interest_amount} tone="dr" />
+          <SummaryRow label="Total outstanding" value={loan.total_amount} bold />
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Amount received (NPR)" required>
+            <input className="input" type="number" step="0.01" min="0.01" autoFocus
+              {...register("amount", { required: true })} />
+          </Field>
+          <Field label={`Payment date (${calendar})`} required>
+            <DateInput calendar={calendar} value={paymentDate}
+              onChange={(v) => setValue("payment_date", v)} />
+          </Field>
+        </div>
+
+        <button
+          type="button"
+          className="text-xs text-brand-600 hover:underline"
+          onClick={() => setValue("amount", loan.total_amount)}
+        >
+          Pay off in full ({formatAmount(loan.total_amount)})
+        </button>
+
+        {entered > 0 && (
+          <div className={`rounded-lg border p-3 text-sm ${over ? "border-danger/30 bg-danger-soft" : "border-gray-200 bg-white"}`}>
+            {over ? (
+              <p className="text-danger-text">
+                That is {formatAmount(entered - outstanding)} more than this loan owes.
+              </p>
+            ) : (
+              <>
+                <p className="mb-2 text-xs uppercase text-gray-500">Will be applied as</p>
+                <SummaryRow label="Towards interest" value={toInterest} tone="dr" />
+                <SummaryRow label="Towards principal" value={toPrincipal} />
+                <SummaryRow
+                  label={remaining <= 0 ? "Loan fully settled — will close" : "Still owing after this"}
+                  value={remaining}
+                  bold
+                />
+              </>
+            )}
+          </div>
+        )}
+
+        <Field label="Remarks">
+          <textarea className="input" rows={2} {...register("remarks")} />
+        </Field>
+
+        <div className="flex justify-end gap-2 pt-2">
+          <button type="button" className="btn-secondary" onClick={onClose}>Cancel</button>
+          <button type="submit" className="btn-primary" disabled={saving || over}>
+            {saving ? "Saving…" : "Record payment"}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+/** One label/amount line inside a summary block. */
+function SummaryRow({ label, value, tone, bold }) {
+  return (
+    <div className="flex items-baseline justify-between py-0.5">
+      <span className="text-gray-500">{label}</span>
+      <span
+        className={`tabular-nums ${bold ? "font-semibold text-gray-900" : "font-medium"} ${
+          tone === "dr" ? "text-dr" : tone === "cr" ? "text-cr" : ""
+        }`}
+      >
+        {formatAmount(value)}
+      </span>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Loan detail — the row's payment history
+// ---------------------------------------------------------------------------
+function LoanDetail({ loan: initial, ornaments, onClose, onChanged }) {
+  const calendar = useSettingsStore((s) => s.calendar);
+  const dateFormat = useSettingsStore((s) => s.dateFormat);
+  const [loan, setLoan] = useState(initial);
+  const [paying, setPaying] = useState(false);
+  const [removing, setRemoving] = useState(null);
+  const { data, loading, error, refresh } = useFetch(`/bandaki/loans/${initial.id}/payments/`);
+  const payments = data ?? [];
+
+  // Re-read the loan too: every payment write moves the settlement figures.
+  const reload = async () => {
+    const { data: fresh } = await api.get(`/bandaki/loans/${initial.id}/`);
+    setLoan(fresh);
+    await refresh();
+    onChanged();
+  };
+
+  const td = "whitespace-nowrap border-b border-gray-100 px-3 py-2 text-sm";
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      // The row behind this dialog already carries the figures, so the title
+      // only has to say *which* loan — a customer can have several running.
+      title={`${loan.customer_name} — ${formatAmount(loan.gross_amount)} taken ${formatDate(loan.loan_date, calendar, { format: dateFormat })}`}
+      wide
+    >
+      <div className="space-y-5">
+        <div>
+          <div className="mb-2 flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-gray-700">Payments received</h3>
+            {loan.is_active && (
+              <button className="btn-primary py-1 text-sm" onClick={() => setPaying(true)}>
+                <HandCoins size={15} /> Receive payment
+              </button>
+            )}
+          </div>
+
+          {error && <ErrorState message={error} />}
+          {loading && !data ? (
+            <Spinner />
+          ) : payments.length === 0 ? (
+            <EmptyState message="No payments received yet." />
+          ) : (
+            <div className="overflow-x-auto rounded-lg border border-gray-200">
+              <table className="min-w-full border-separate border-spacing-0">
+                <thead className="text-left text-xs uppercase text-gray-500">
+                  <tr>
+                    <th className={STICKY_TH}>Date</th>
+                    <th className={STICKY_TH}>Received{NPR}</th>
+                    <th className={STICKY_TH}>To interest{NPR}</th>
+                    <th className={STICKY_TH}>To principal{NPR}</th>
+                    <th className={STICKY_TH}>Owing after{NPR}</th>
+                    <th className={STICKY_TH}>Remarks</th>
+                    <th className={STICKY_TH}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {payments.map((p) => (
+                    <tr key={p.id} className="hover:bg-gray-50">
+                      <td className={`${td} text-gray-600`}>
+                        {formatDate(p.payment_date, calendar, { format: dateFormat })}
+                      </td>
+                      <td className={`${td} font-semibold text-cr`}>{formatAmount(p.amount)}</td>
+                      <td className={`${td} text-dr`}>{formatAmount(p.interest_part)}</td>
+                      <td className={td}>{formatAmount(p.principal_part)}</td>
+                      <td className={`${td} font-medium`}>{formatAmount(p.outstanding_after)}</td>
+                      <td className={`${td} text-gray-500`}>{p.remarks || "—"}</td>
+                      <td className={`${td} text-right`}>
+                        <button
+                          className="rounded p-1 text-gray-400 hover:bg-danger-soft hover:text-danger"
+                          title="Delete payment"
+                          onClick={() => setRemoving(p)}
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {payments.length > 0 && (
+            <p className="mt-2 text-xs text-gray-400">
+              Each payment clears the interest owed on that day first; whatever is left cuts the
+              principal, so later interest is charged on the smaller amount.
+            </p>
+          )}
+        </div>
+
+        <PledgedGold
+          loan={loan}
+          ornaments={ornaments}
+          onChanged={(fresh) => { setLoan(fresh); onChanged(); }}
+        />
+      </div>
+
+      {paying && (
+        <PaymentForm
+          loan={loan}
+          onClose={() => setPaying(false)}
+          onSaved={() => { setPaying(false); reload(); }}
+        />
+      )}
+
+      {removing && (
+        <DeletePayment
+          payment={removing}
+          onClose={() => setRemoving(null)}
+          onDone={() => { setRemoving(null); reload(); }}
+        />
+      )}
+    </Modal>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Pledged gold panel — what the shop is holding, released piece by piece
+// ---------------------------------------------------------------------------
+function PledgedGold({ loan, ornaments, onChanged }) {
+  const calendar = useSettingsStore((s) => s.calendar);
+  const dateFormat = useSettingsStore((s) => s.dateFormat);
+  const [adding, setAdding] = useState(false);
+  const [busy, setBusy] = useState(null);
+  const [error, setError] = useState("");
+  const items = loan.items ?? [];
+  const held = items.filter((i) => i.is_held);
+
+  // Every item write returns the re-derived loan, so one call keeps the whole
+  // panel — held weight included — in step.
+  const setReturned = async (item) => {
+    setError("");
+    setBusy(item.id);
+    try {
+      const { data } = await api.patch(`/bandaki/items/${item.id}/`, {
+        returned_on: item.is_held ? new Date().toISOString().slice(0, 10) : null,
+      });
+      onChanged(data);
+    } catch (e) {
+      setError(apiError(e));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const td = "whitespace-nowrap border-b border-gray-100 px-3 py-2 text-sm";
+
+  return (
+    <div>
+      <div className="mb-2 flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-gray-700">
+          Gold held{" "}
+          {held.length > 0 && (
+            <span className="font-normal text-gray-400">
+              · {formatGramsValue(loan.net_weight_held_g)} g net
+            </span>
+          )}
+        </h3>
+        <button className="btn-secondary py-1 text-sm" onClick={() => setAdding(true)}>
+          <Plus size={15} /> Add piece
+        </button>
+      </div>
+
+      {error && <ErrorState message={error} />}
+
+      {items.length === 0 ? (
+        <EmptyState message="No gold recorded against this loan." />
+      ) : (
+        <div className="overflow-x-auto rounded-lg border border-gray-200">
+          <table className="min-w-full border-separate border-spacing-0">
+            <thead className="text-left text-xs uppercase text-gray-500">
+              <tr>
+                <th className={STICKY_TH}>Item</th>
+                <th className={STICKY_TH_RIGHT}>Qty</th>
+                <th className={STICKY_TH_RIGHT}>Gross g</th>
+                <th className={STICKY_TH}>Carat</th>
+                <th className={STICKY_TH_RIGHT}>Net g</th>
+                <th className={STICKY_TH}>Status</th>
+                <th className={STICKY_TH}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((it) => (
+                <tr key={it.id} className={`hover:bg-gray-50 ${it.is_held ? "" : "opacity-60"}`}>
+                  <td className={td}>
+                    {it.ornament_name}
+                    {it.description && (
+                      <span className="block text-xs text-gray-400">{it.description}</span>
+                    )}
+                  </td>
+                  <td className={`${td} text-right tabular-nums`}>{it.quantity}</td>
+                  <td className={`${td} text-right tabular-nums text-gray-600`}>
+                    {formatGramsValue(it.gross_weight_g)}
+                  </td>
+                  <td className={`${td} text-gray-600`}>{it.carat}kt</td>
+                  <td className={`${td} text-right font-medium tabular-nums`}>
+                    {formatGramsValue(it.net_weight_g)}
+                  </td>
+                  <td className={td}>
+                    {it.is_held ? (
+                      <Badge tone="amber">Held</Badge>
+                    ) : (
+                      <span className="text-xs text-gray-500">
+                        Returned {formatDate(it.returned_on, calendar, { format: dateFormat })}
+                      </span>
+                    )}
+                  </td>
+                  <td className={`${td} text-right`}>
+                    {/* Words, not icons: "give it back" and "I mis-clicked"
+                        are too close in meaning for two rotation glyphs. */}
+                    <button
+                      className="rounded px-2 py-1 text-xs font-medium text-gray-500 hover:bg-gray-100 hover:text-brand-600 disabled:opacity-40"
+                      disabled={busy === it.id}
+                      onClick={() => setReturned(it)}
+                    >
+                      {it.is_held ? "Return" : "Undo"}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {items.length > 0 && (
+        <p className="mt-2 text-xs text-gray-400">
+          Returning a piece records the date rather than deleting the row, so the loan keeps a
+          record of everything that was ever held against it.
+        </p>
+      )}
+
+      {adding && (
+        <AddPledgedItem
+          loan={loan}
+          ornaments={ornaments}
+          onClose={() => setAdding(false)}
+          onAdded={(fresh) => { setAdding(false); onChanged(fresh); }}
         />
       )}
     </div>
   );
 }
 
-function LoanForm({ loan, customers, refreshCustomers, onClose, onSaved }) {
+function AddPledgedItem({ loan, ornaments, onClose, onAdded }) {
+  const { register, handleSubmit, control } = useForm({
+    defaultValues: { ornament: "", quantity: 1, gross_weight_g: "", carat: 22, description: "" },
+  });
+  const gross = useWatch({ control, name: "gross_weight_g" });
+  const carat = useWatch({ control, name: "carat" });
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const onSubmit = async (v) => {
+    setError("");
+    setSaving(true);
+    try {
+      const { data } = await api.post(`/bandaki/loans/${loan.id}/items/`, {
+        ornament: Number(v.ornament),
+        quantity: Number(v.quantity) || 1,
+        gross_weight_g: v.gross_weight_g,
+        carat: Number(v.carat),
+        description: v.description || "",
+      });
+      onAdded(data);
+    } catch (e) {
+      setError(apiError(e));
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal open onClose={onClose} title="Add pledged gold">
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        {error && <ErrorState message={error} />}
+        <Field label="Item" required>
+          <FormSelect
+            control={control}
+            name="ornament"
+            rules={{ required: true }}
+            placeholder="Select item…"
+            options={ornaments.map((o) => ({ value: o.id, label: o.name }))}
+          />
+        </Field>
+        <div className="grid grid-cols-3 gap-3">
+          <Field label="Quantity" required>
+            <input className="input" type="number" min="1" step="1"
+              {...register("quantity", { required: true })} />
+          </Field>
+          <Field label="Gross (g)" required>
+            <input className="input" type="number" step="0.001" min="0.001"
+              {...register("gross_weight_g", { required: true })} />
+          </Field>
+          <Field label="Carat" required>
+            <FormSelect control={control} name="carat" options={CARAT_OPTIONS} />
+          </Field>
+        </div>
+        <p className="text-sm text-gray-500">
+          Net weight{" "}
+          <span className="font-semibold tabular-nums text-gray-800">
+            {formatGramsValue(netOf(gross, carat))} g
+          </span>
+        </p>
+        <Field label="Description">
+          <input className="input" placeholder="e.g. thick chain with locket"
+            {...register("description")} />
+        </Field>
+        <div className="flex justify-end gap-2 pt-2">
+          <button type="button" className="btn-secondary" onClick={onClose}>Cancel</button>
+          <button type="submit" className="btn-primary" disabled={saving}>
+            {saving ? "Saving…" : "Add piece"}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function DeletePayment({ payment, onClose, onDone }) {
+  const calendar = useSettingsStore((s) => s.calendar);
+  const dateFormat = useSettingsStore((s) => s.dateFormat);
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const run = async () => {
+    setError("");
+    setSaving(true);
+    try {
+      await api.delete(`/bandaki/payments/${payment.id}/`);
+      onDone();
+    } catch (e) {
+      setError(apiError(e));
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal open onClose={onClose} title="Delete this payment?">
+      <div className="space-y-4">
+        {error && <ErrorState message={error} />}
+        <p className="text-sm text-gray-600">
+          Removing the {formatAmount(payment.amount)} received on{" "}
+          {formatDate(payment.payment_date, calendar, { format: dateFormat })} will re-work every
+          payment after it, and reopen the loan if it no longer comes out settled.
+        </p>
+        <div className="flex justify-end gap-2">
+          <button className="btn-secondary" onClick={onClose}>Cancel</button>
+          <button className="btn-danger" onClick={run} disabled={saving}>
+            {saving ? "Deleting…" : "Delete payment"}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function LoanForm({ loan, customers, ornaments, refreshCustomers, onClose, onSaved }) {
   const isEdit = Boolean(loan.id);
   const calendar = useSettingsStore((s) => s.calendar);
   const { register, handleSubmit, control, setValue } = useForm({
@@ -226,6 +792,7 @@ function LoanForm({ loan, customers, refreshCustomers, onClose, onSaved }) {
       remarks: loan.remarks ?? "",
       loan_date: loan.loan_date ?? new Date().toISOString().slice(0, 10),
       is_active: String(loan.is_active ?? true),
+      items: [],
     },
   });
   const loanDate = useWatch({ control, name: "loan_date" });
@@ -246,6 +813,15 @@ function LoanForm({ loan, customers, refreshCustomers, onClose, onSaved }) {
       if (isEdit) {
         await api.patch(`/bandaki/loans/${loan.id}/`, { ...payload, is_active: v.is_active });
       } else {
+        // Gold and money change hands together, so the pieces go up with the
+        // loan — the server writes both or neither.
+        payload.items = (v.items ?? []).map((it) => ({
+          ornament: Number(it.ornament),
+          quantity: Number(it.quantity) || 1,
+          gross_weight_g: it.gross_weight_g,
+          carat: Number(it.carat),
+          description: it.description || "",
+        }));
         await api.post("/bandaki/loans/", payload);
       }
       onSaved();
@@ -308,6 +884,12 @@ function LoanForm({ loan, customers, refreshCustomers, onClose, onSaved }) {
           </Field>
         </div>
 
+        {/* Pledged gold is captured with a new loan. On an existing one it is
+            managed from the detail panel, where returns live too. */}
+        {!isEdit && (
+          <PledgedItemsFields control={control} register={register} ornaments={ornaments} />
+        )}
+
         <Field label="Remarks">
           <textarea className="input" rows={2} {...register("remarks")} />
         </Field>
@@ -343,6 +925,111 @@ function LoanForm({ loan, customers, refreshCustomers, onClose, onSaved }) {
         />
       )}
     </Modal>
+  );
+}
+
+// Carat options mirror the gold ledger; net weight is gross x carat/24.
+const CARAT_OPTIONS = [
+  { value: 22, label: "22kt" },
+  { value: 24, label: "24kt" },
+];
+
+const netOf = (gross, carat) =>
+  (Number(gross) || 0) * ((Number(carat) || 22) / 24);
+
+/** Repeatable rows for the gold a customer is handing over. */
+function PledgedItemsFields({ control, register, ornaments }) {
+  const { fields, append, remove } = useFieldArray({ control, name: "items" });
+  const items = useWatch({ control, name: "items" }) ?? [];
+  const totalNet = items.reduce(
+    (sum, it) => sum + netOf(it?.gross_weight_g, it?.carat) * (Number(it?.quantity) || 1),
+    0,
+  );
+
+  const addRow = () =>
+    append({ ornament: "", quantity: 1, gross_weight_g: "", carat: 22, description: "" });
+
+  return (
+    <div className="rounded-lg border border-gray-200 p-3">
+      <div className="mb-2 flex items-center justify-between">
+        <div>
+          <p className="text-sm font-semibold text-gray-700">Gold pledged</p>
+          <p className="text-xs text-gray-400">
+            What the customer is handing over as security.
+          </p>
+        </div>
+        <button type="button" className="btn-secondary py-1 text-sm" onClick={addRow}>
+          <Plus size={15} /> Add piece
+        </button>
+      </div>
+
+      {fields.length === 0 ? (
+        <p className="py-2 text-sm text-gray-400">
+          No pieces recorded. You can add them later from the loan.
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {fields.map((f, i) => (
+            <div key={f.id} className="grid grid-cols-12 items-end gap-2">
+              <div className="col-span-12 sm:col-span-3">
+                <label className="text-xs text-gray-500">Item</label>
+                <FormSelect
+                  control={control}
+                  name={`items.${i}.ornament`}
+                  rules={{ required: true }}
+                  placeholder="Select…"
+                  options={ornaments.map((o) => ({ value: o.id, label: o.name }))}
+                />
+              </div>
+              <div className="col-span-3 sm:col-span-1">
+                <label className="text-xs text-gray-500">Qty</label>
+                <input className="input" type="number" min="1" step="1"
+                  {...register(`items.${i}.quantity`, { required: true })} />
+              </div>
+              <div className="col-span-5 sm:col-span-2">
+                <label className="text-xs text-gray-500">Gross g</label>
+                <input className="input" type="number" step="0.001" min="0.001"
+                  {...register(`items.${i}.gross_weight_g`, { required: true })} />
+              </div>
+              <div className="col-span-4 sm:col-span-2">
+                <label className="text-xs text-gray-500">Carat</label>
+                <FormSelect
+                  control={control}
+                  name={`items.${i}.carat`}
+                  options={CARAT_OPTIONS}
+                />
+              </div>
+              <div className="col-span-10 sm:col-span-3">
+                <label className="text-xs text-gray-500">
+                  Description{" "}
+                  <span className="tabular-nums text-gray-400">
+                    · net {formatGramsValue(netOf(items[i]?.gross_weight_g, items[i]?.carat))} g
+                  </span>
+                </label>
+                <input className="input" placeholder="e.g. with locket"
+                  {...register(`items.${i}.description`)} />
+              </div>
+              <div className="col-span-2 sm:col-span-1 pb-1 text-right">
+                <button
+                  type="button"
+                  className="rounded p-1.5 text-gray-400 hover:bg-danger-soft hover:text-danger"
+                  title="Remove this piece"
+                  onClick={() => remove(i)}
+                >
+                  <Trash2 size={15} />
+                </button>
+              </div>
+            </div>
+          ))}
+          <p className="pt-1 text-right text-sm text-gray-600">
+            Total net held{" "}
+            <span className="font-semibold tabular-nums text-gray-900">
+              {formatGramsValue(totalNet)} g
+            </span>
+          </p>
+        </div>
+      )}
+    </div>
   );
 }
 

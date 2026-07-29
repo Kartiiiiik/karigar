@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useForm, useWatch } from "react-hook-form";
 import DateInput from "../components/DateInput";
+import Select, { FormSelect } from "../components/Select";
 import { ArrowUpRight, ArrowDownLeft, Pencil, Archive } from "lucide-react";
 import ArchiveDialog from "../components/ArchiveDialog";
 import api, { apiError } from "../lib/api";
@@ -108,26 +109,30 @@ export default function Cash() {
         )}
         <div className="flex flex-wrap gap-2 sm:justify-end">
           {isStaff && (
-            <select
-              className="input min-w-0 flex-1 truncate sm:w-40 sm:flex-none"
+            <Select
+              className="min-w-0 flex-1 sm:w-40 sm:flex-none"
+              aria-label="Filter by karigar"
               value={filters.karigar}
-              onChange={(e) =>
-                setFilters((f) => ({ ...f, karigar: e.target.value, search: e.target.value ? f.search : "" }))
+              onChange={(v) =>
+                setFilters((f) => ({ ...f, karigar: v, search: v ? f.search : "" }))
               }
-            >
-              <option value="">All karigars</option>
-              {karigars.map((k) => <option key={k.id} value={k.id}>{k.full_name}</option>)}
-            </select>
+              options={[
+                { value: "", label: "All karigars" },
+                ...karigars.map((k) => ({ value: k.id, label: k.full_name })),
+              ]}
+            />
           )}
-          <select
-            className="input w-24 shrink-0 sm:w-36"
+          <Select
+            className="w-24 shrink-0 sm:w-36"
+            aria-label="Filter by direction"
             value={filters.direction}
-            onChange={(e) => setFilters((f) => ({ ...f, direction: e.target.value }))}
-          >
-            <option value="">Dr &amp; Cr</option>
-            <option value="dr">Dr</option>
-            <option value="cr">Cr</option>
-          </select>
+            onChange={(v) => setFilters((f) => ({ ...f, direction: v }))}
+            options={[
+              { value: "", label: "Dr & Cr" },
+              { value: "dr", label: "Dr" },
+              { value: "cr", label: "Cr" },
+            ]}
+          />
           <input
             className="input w-full sm:w-56"
             placeholder={searchDisabled ? "Select a karigar to search" : "Search amount, remarks, order…"}
@@ -221,7 +226,8 @@ function CashEntryForm({ entry, karigars, onClose, onSaved }) {
   const calendar = useSettingsStore((s) => s.calendar);
   const { register, handleSubmit, control, setValue } = useForm({
     defaultValues: {
-      karigar: entry.karigar ?? "",
+      // Select values are strings, matching what the native select reported.
+      karigar: entry.karigar != null ? String(entry.karigar) : "",
       amount_npr: entry.amount_npr ?? "",
       order_number: entry.order_number ?? "",
       remarks: entry.remarks ?? "",
@@ -257,10 +263,14 @@ function CashEntryForm({ entry, karigars, onClose, onSaved }) {
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         {error && <ErrorState message={error} />}
         <Field label="Karigar" required>
-          <select className="input" {...register("karigar", { required: true })} disabled={isEdit}>
-            <option value="">Select karigar…</option>
-            {karigars.map((k) => <option key={k.id} value={k.id}>{k.full_name}</option>)}
-          </select>
+          <FormSelect
+            control={control}
+            name="karigar"
+            rules={{ required: true }}
+            disabled={isEdit}
+            placeholder="Select karigar…"
+            options={karigars.map((k) => ({ value: k.id, label: k.full_name }))}
+          />
         </Field>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Amount (NPR)" required>

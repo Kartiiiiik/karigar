@@ -4,6 +4,7 @@ import api, { apiError } from "../lib/api";
 import { useFetch } from "../hooks/useFetch";
 import { PageHeader, Spinner, ErrorState, Field, STICKY_TH } from "../components/ui";
 import DateInput from "../components/DateInput";
+import Select from "../components/Select";
 import { BS_MONTHS, monthRangeToApi, currentYear } from "../lib/date";
 import { useSettingsStore } from "../store/settings";
 
@@ -117,26 +118,35 @@ export default function Reports() {
         {/* Month + year on one row (karigar full width on mobile). */}
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           <Field label={`Month (${calendar})`}>
-            <select className="input" value={form.month}
-              onChange={(e) => setForm((f) => ({ ...f, month: e.target.value }))}>
-              <option value="">— Range —</option>
-              {months.map((m, i) => <option key={m} value={i}>{m}</option>)}
-            </select>
+            <Select
+              value={form.month}
+              onChange={(v) => setForm((f) => ({ ...f, month: v }))}
+              options={[
+                { value: "", label: "— Range —" },
+                ...months.map((m, i) => ({ value: i, label: m })),
+              ]}
+            />
           </Field>
           <Field label={`Year (${calendar})`}>
-            <select className="input" value={form.year}
-              onChange={(e) => setForm((f) => ({ ...f, year: e.target.value }))}>
-              <option value="">—</option>
-              {years.map((y) => <option key={y} value={y}>{y}</option>)}
-            </select>
+            <Select
+              value={form.year}
+              onChange={(v) => setForm((f) => ({ ...f, year: v }))}
+              options={[
+                { value: "", label: "—" },
+                ...years.map((y) => ({ value: y, label: String(y) })),
+              ]}
+            />
           </Field>
           <div className="col-span-2 sm:col-span-1">
             <Field label="Karigar">
-              <select className="input" value={form.karigar}
-                onChange={(e) => setForm((f) => ({ ...f, karigar: e.target.value }))}>
-                <option value="">All karigars</option>
-                {karigars.map((k) => <option key={k.id} value={k.id}>{k.full_name}</option>)}
-              </select>
+              <Select
+                value={form.karigar}
+                onChange={(v) => setForm((f) => ({ ...f, karigar: v }))}
+                options={[
+                  { value: "", label: "All karigars" },
+                  ...karigars.map((k) => ({ value: k.id, label: k.full_name })),
+                ]}
+              />
             </Field>
           </div>
         </div>

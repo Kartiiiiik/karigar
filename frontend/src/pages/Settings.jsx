@@ -3,6 +3,7 @@ import { useForm } from "react-hook-form";
 import { Calendar, Check } from "lucide-react";
 import api, { apiError } from "../lib/api";
 import { PageHeader, ErrorState, Field } from "../components/ui";
+import Select from "../components/Select";
 import { useSettingsStore } from "../store/settings";
 import { formatDate, DATE_FORMATS } from "../lib/date";
 
@@ -75,16 +76,13 @@ export default function Settings() {
 
           <div>
             <p className="label">Date format {savedFmt && <span className="text-green-600">· saved</span>}</p>
-            <select
-              className="input"
+            <Select
+              aria-label="Date format"
               value={dateFormat}
               disabled={saving}
-              onChange={(e) => changeDateFormat(e.target.value)}
-            >
-              {DATE_FORMATS.map((f) => (
-                <option key={f.value} value={f.value}>{f.label}</option>
-              ))}
-            </select>
+              onChange={(v) => changeDateFormat(v)}
+              options={DATE_FORMATS.map((f) => ({ value: f.value, label: f.label }))}
+            />
           </div>
         </div>
 

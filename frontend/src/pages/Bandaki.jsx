@@ -8,6 +8,7 @@ import {
   PageHeader, Spinner, EmptyState, ErrorState, Modal, Field, Badge, SortableTh, STICKY_TH,
 } from "../components/ui";
 import DateInput from "../components/DateInput";
+import Select, { FormSelect } from "../components/Select";
 import { formatAmount } from "../lib/format";
 import { formatDate } from "../lib/date";
 import { useSettingsStore } from "../store/settings";
@@ -115,23 +116,27 @@ function Loans() {
           </button>
         </div>
         <div className="flex flex-wrap gap-2 sm:justify-end">
-          <select
-            className="input min-w-0 flex-1 truncate sm:w-48 sm:flex-none"
+          <Select
+            className="min-w-0 flex-1 sm:w-48 sm:flex-none"
+            aria-label="Filter by customer"
             value={filters.customer}
-            onChange={(e) => setFilters((f) => ({ ...f, customer: e.target.value }))}
-          >
-            <option value="">All customers</option>
-            {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-          <select
-            className="input w-28 shrink-0 sm:w-36"
+            onChange={(v) => setFilters((f) => ({ ...f, customer: v }))}
+            options={[
+              { value: "", label: "All customers" },
+              ...customers.map((c) => ({ value: c.id, label: c.name })),
+            ]}
+          />
+          <Select
+            className="w-28 shrink-0 sm:w-36"
+            aria-label="Filter by status"
             value={filters.is_active}
-            onChange={(e) => setFilters((f) => ({ ...f, is_active: e.target.value }))}
-          >
-            <option value="">All</option>
-            <option value="true">Active</option>
-            <option value="false">Closed</option>
-          </select>
+            onChange={(v) => setFilters((f) => ({ ...f, is_active: v }))}
+            options={[
+              { value: "", label: "All" },
+              { value: "true", label: "Active" },
+              { value: "false", label: "Closed" },
+            ]}
+          />
           <input
             className="input w-full sm:w-56"
             placeholder="Search customer, phone, remarks…"
@@ -213,13 +218,14 @@ function LoanForm({ loan, customers, refreshCustomers, onClose, onSaved }) {
   const calendar = useSettingsStore((s) => s.calendar);
   const { register, handleSubmit, control, setValue } = useForm({
     defaultValues: {
-      customer: loan.customer ?? "",
+      // Select values are strings, matching what the native select reported.
+      customer: loan.customer != null ? String(loan.customer) : "",
       gross_amount: loan.gross_amount ?? "",
       interest_rate: loan.interest_rate ?? "",
       interest_period: loan.interest_period ?? "monthly",
       remarks: loan.remarks ?? "",
       loan_date: loan.loan_date ?? new Date().toISOString().slice(0, 10),
-      is_active: loan.is_active ?? true,
+      is_active: String(loan.is_active ?? true),
     },
   });
   const loanDate = useWatch({ control, name: "loan_date" });
@@ -255,10 +261,13 @@ function LoanForm({ loan, customers, refreshCustomers, onClose, onSaved }) {
 
         <Field label="Customer" required>
           <div className="flex gap-2">
-            <select className="input" {...register("customer", { required: true })}>
-              <option value="">Select customer…</option>
-              {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
+            <FormSelect
+              control={control}
+              name="customer"
+              rules={{ required: true }}
+              placeholder="Select customer…"
+              options={customers.map((c) => ({ value: c.id, label: c.name }))}
+            />
             <button
               type="button"
               className="btn-secondary shrink-0"
@@ -287,10 +296,15 @@ function LoanForm({ loan, customers, refreshCustomers, onClose, onSaved }) {
               {...register("interest_rate", { required: true })} />
           </Field>
           <Field label="Interest period" required>
-            <select className="input" {...register("interest_period", { required: true })}>
-              <option value="monthly">Monthly</option>
-              <option value="yearly">Yearly</option>
-            </select>
+            <FormSelect
+              control={control}
+              name="interest_period"
+              rules={{ required: true }}
+              options={[
+                { value: "monthly", label: "Monthly" },
+                { value: "yearly", label: "Yearly" },
+              ]}
+            />
           </Field>
         </div>
 
@@ -300,10 +314,14 @@ function LoanForm({ loan, customers, refreshCustomers, onClose, onSaved }) {
 
         {isEdit && (
           <Field label="Loan status">
-            <select className="input" {...register("is_active")}>
-              <option value={true}>Active (still owed)</option>
-              <option value={false}>Closed (repaid)</option>
-            </select>
+            <FormSelect
+              control={control}
+              name="is_active"
+              options={[
+                { value: true, label: "Active (still owed)" },
+                { value: false, label: "Closed (repaid)" },
+              ]}
+            />
           </Field>
         )}
 

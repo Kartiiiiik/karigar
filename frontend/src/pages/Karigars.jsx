@@ -6,6 +6,7 @@ import api, { apiError } from "../lib/api";
 import { useFetch } from "../hooks/useFetch";
 import { PageHeader, Spinner, EmptyState, ErrorState, Modal, Field, DrCrBadge, Badge } from "../components/ui";
 import DateInput from "../components/DateInput";
+import { FormSelect } from "../components/Select";
 import { useSettingsStore } from "../store/settings";
 import { formatGoldBalance, formatCashBalance } from "../lib/format";
 
@@ -261,19 +262,31 @@ function KarigarForm({ karigar, onClose, onRefresh, onSaved }) {
           <Field label="Opening gold (g)">
             <div className="flex gap-2">
               <input className="input" type="number" step="0.001" min="0" {...register("opening_gold_amount")} />
-              <select className="input w-24" {...register("opening_gold_dir")}>
-                <option value="dr">Dr</option>
-                <option value="cr">Cr</option>
-              </select>
+              <FormSelect
+                control={control}
+                name="opening_gold_dir"
+                className="w-24 shrink-0"
+                aria-label="Opening gold direction"
+                options={[
+                  { value: "dr", label: "Dr" },
+                  { value: "cr", label: "Cr" },
+                ]}
+              />
             </div>
           </Field>
           <Field label="Opening cash (NPR)">
             <div className="flex gap-2">
               <input className="input" type="number" step="0.01" min="0" {...register("opening_cash_amount")} />
-              <select className="input w-24" {...register("opening_cash_dir")}>
-                <option value="dr">Dr</option>
-                <option value="cr">Cr</option>
-              </select>
+              <FormSelect
+                control={control}
+                name="opening_cash_dir"
+                className="w-24 shrink-0"
+                aria-label="Opening cash direction"
+                options={[
+                  { value: "dr", label: "Dr" },
+                  { value: "cr", label: "Cr" },
+                ]}
+              />
             </div>
           </Field>
         </div>

@@ -9,6 +9,7 @@ import {
   PageHeader, Spinner, EmptyState, ErrorState, Modal, Field, SortableTh, STICKY_TH,
 } from "../components/ui";
 import DateInput from "../components/DateInput";
+import Select, { FormSelect } from "../components/Select";
 import { formatGramsValue } from "../lib/format";
 
 // Small unit label shown in a column header (keeps rows unit-free).
@@ -133,26 +134,30 @@ function Entries({ isStaff }) {
         )}
         <div className="flex flex-wrap gap-2 sm:justify-end">
           {isStaff && (
-            <select
-              className="input min-w-0 flex-1 truncate sm:w-40 sm:flex-none"
+            <Select
+              className="min-w-0 flex-1 sm:w-40 sm:flex-none"
+              aria-label="Filter by karigar"
               value={filters.karigar}
-              onChange={(e) =>
-                setFilters((f) => ({ ...f, karigar: e.target.value, search: e.target.value ? f.search : "" }))
+              onChange={(v) =>
+                setFilters((f) => ({ ...f, karigar: v, search: v ? f.search : "" }))
               }
-            >
-              <option value="">All karigars</option>
-              {karigars.map((k) => <option key={k.id} value={k.id}>{k.full_name}</option>)}
-            </select>
+              options={[
+                { value: "", label: "All karigars" },
+                ...karigars.map((k) => ({ value: k.id, label: k.full_name })),
+              ]}
+            />
           )}
-          <select
-            className="input w-24 shrink-0 sm:w-36"
+          <Select
+            className="w-24 shrink-0 sm:w-36"
+            aria-label="Filter by direction"
             value={filters.direction}
-            onChange={(e) => setFilters((f) => ({ ...f, direction: e.target.value }))}
-          >
-            <option value="">Dr &amp; Cr</option>
-            <option value="dr">Dr</option>
-            <option value="cr">Cr</option>
-          </select>
+            onChange={(v) => setFilters((f) => ({ ...f, direction: v }))}
+            options={[
+              { value: "", label: "Dr & Cr" },
+              { value: "dr", label: "Dr" },
+              { value: "cr", label: "Cr" },
+            ]}
+          />
           <input
             className="input w-full sm:w-56"
             placeholder={searchDisabled ? "Select a karigar to search" : "Search amount, ornament, order…"}
@@ -251,11 +256,12 @@ function GoldEntryForm({ entry, karigars, onClose, onSaved }) {
   const calendar = useSettingsStore((s) => s.calendar);
   const { register, handleSubmit, control, setValue, getValues } = useForm({
     defaultValues: {
-      karigar: entry.karigar ?? "",
+      // Select values are strings, matching what the native select reported.
+      karigar: entry.karigar != null ? String(entry.karigar) : "",
       order_number: entry.order_number ?? "",
       gross_weight_g: entry.gross_weight_g ?? "",
-      carat: entry.carat ?? 24,
-      ornament: entry.ornament ?? "",
+      carat: String(entry.carat ?? 24),
+      ornament: entry.ornament != null ? String(entry.ornament) : "",
       remarks: entry.remarks ?? "",
       entry_date: entry.entry_date ?? new Date().toISOString().slice(0, 10),
     },
@@ -269,15 +275,13 @@ function GoldEntryForm({ entry, karigars, onClose, onSaved }) {
   const { data: ornData, refresh: refreshOrnaments } = useFetch("/ornaments/", { page_size: 200 });
   const ornaments = ornData?.results ?? [];
 
-  // The ornament/order <select> options are fetched below (async), so they
-  // aren't in the DOM when react-hook-form applies defaultValues at mount. On
-  // edit the native select therefore can't show the saved value — re-sync it
-  // once the list arrives. (Also defaults a new receipt's ornament to "Gold".)
+  // Ornaments are fetched above (async), so the list isn't available when
+  // react-hook-form applies defaultValues at mount. A saved value displays
+  // fine regardless (it lives in form state, not in the option list), but a
+  // new receipt's default of "Gold" can only be resolved once the list lands.
   useEffect(() => {
     if (!ornaments.length) return;
-    if (isEdit && entry.ornament) {
-      setValue("ornament", String(entry.ornament));
-    } else if (!isEdit && isReceive && !getValues("ornament")) {
+    if (!isEdit && isReceive && !getValues("ornament")) {
       const gold = ornaments.find((o) => o.name.toLowerCase() === "gold");
       if (gold) setValue("ornament", String(gold.id));
     }
@@ -332,10 +336,14 @@ function GoldEntryForm({ entry, karigars, onClose, onSaved }) {
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Karigar" required>
-            <select className="input" {...register("karigar", { required: true })} disabled={isEdit}>
-              <option value="">Select karigar…</option>
-              {karigars.map((k) => <option key={k.id} value={k.id}>{k.full_name}</option>)}
-            </select>
+            <FormSelect
+              control={control}
+              name="karigar"
+              rules={{ required: true }}
+              disabled={isEdit}
+              placeholder="Select karigar…"
+              options={karigars.map((k) => ({ value: k.id, label: k.full_name }))}
+            />
           </Field>
           <Field label={`Date (${calendar})`} required>
             <DateInput calendar={calendar} value={entryDate}
@@ -348,10 +356,15 @@ function GoldEntryForm({ entry, karigars, onClose, onSaved }) {
             <input className="input" type="number" step="0.001" min="0.001" {...register("gross_weight_g", { required: true })} />
           </Field>
           <Field label="Carat" required>
-            <select className="input" {...register("carat", { required: true })}>
-              <option value={24}>24kt</option>
-              <option value={22}>22kt</option>
-            </select>
+            <FormSelect
+              control={control}
+              name="carat"
+              rules={{ required: true }}
+              options={[
+                { value: 24, label: "24kt" },
+                { value: 22, label: "22kt" },
+              ]}
+            />
           </Field>
           <Field label="Net weight (g)">
             <input className="input bg-gray-50" value={netPreview(gross, carat)} readOnly tabIndex={-1} />
@@ -362,12 +375,16 @@ function GoldEntryForm({ entry, karigars, onClose, onSaved }) {
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Ornament received" required>
               <div className="flex gap-2">
-                <select className="input" {...register("ornament")}>
-                  <option value="">Select ornament…</option>
-                  {ornaments.filter((o) => o.is_active).map((o) => (
-                    <option key={o.id} value={o.id}>{o.name}</option>
-                  ))}
-                </select>
+                <FormSelect
+                  control={control}
+                  name="ornament"
+                  options={[
+                    { value: "", label: "Select ornament…" },
+                    ...ornaments
+                      .filter((o) => o.is_active)
+                      .map((o) => ({ value: o.id, label: o.name })),
+                  ]}
+                />
                 <button
                   type="button"
                   className="btn-secondary shrink-0"

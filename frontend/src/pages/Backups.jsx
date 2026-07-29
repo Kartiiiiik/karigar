@@ -7,6 +7,7 @@ import {
 import api, { apiError } from "../lib/api";
 import { useFetch } from "../hooks/useFetch";
 import { PageHeader, Spinner, EmptyState, ErrorState, Field, Badge, Modal } from "../components/ui";
+import { FormSelect } from "../components/Select";
 import { formatDate } from "../lib/date";
 import { useSettingsStore } from "../store/settings";
 import { useAuthStore } from "../store/auth";
@@ -188,7 +189,7 @@ function DestBadge({ ok, icon: Icon, label, reason }) {
 }
 
 function ConfigForm({ data, onSaved }) {
-  const { register, handleSubmit } = useForm({
+  const { register, handleSubmit, control } = useForm({
     defaultValues: {
       primary_path: data.primary_path ?? "",
       secondary_path: data.secondary_path ?? "",
@@ -229,12 +230,16 @@ function ConfigForm({ data, onSaved }) {
         </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Automatic frequency">
-            <select className="input" {...register("frequency")}>
-              <option value="off">Off</option>
-              <option value="daily">Daily</option>
-              <option value="weekly">Weekly</option>
-              <option value="monthly">Monthly</option>
-            </select>
+            <FormSelect
+              control={control}
+              name="frequency"
+              options={[
+                { value: "off", label: "Off" },
+                { value: "daily", label: "Daily" },
+                { value: "weekly", label: "Weekly" },
+                { value: "monthly", label: "Monthly" },
+              ]}
+            />
           </Field>
           <label className="flex items-end gap-2 pb-2 text-sm">
             <input type="checkbox" {...register("enabled")} /> Enable scheduled backups

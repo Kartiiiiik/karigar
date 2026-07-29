@@ -1,7 +1,8 @@
 """Seed idempotent demo data.
 
 Seeds: one Shop, its AppSetting, an owner, a manager, two karigar accounts with
-profiles + opening balances, a few ornaments, and gold/cash ledger entries.
+profiles + opening balances, a few ornaments, gold/cash ledger entries, and
+bandaki (gold-loan) customers with loans.
 
 Run:  python manage.py seed_demo
 """
@@ -11,8 +12,10 @@ from decimal import Decimal
 
 from django.core.management.base import BaseCommand
 from django.db import transaction
+from django.utils import timezone
 
 from apps.accounts.models import AppSetting, CalendarPreference, Role, Shop, User
+from apps.bandaki.models import BandakiCustomer, BandakiLoan, InterestPeriod
 from apps.ledger.models import (
     CashEntry,
     Direction,
@@ -28,6 +31,31 @@ DEMO_USERS = [
     {"username": "manager", "full_name": "Shop Manager", "email": "manager@karigar.local", "role": Role.MANAGER},
     {"username": "karigar1", "full_name": "Ram Bahadur", "email": "karigar1@karigar.local", "role": Role.KARIGAR},
     {"username": "karigar2", "full_name": "Sita Devi", "email": "karigar2@karigar.local", "role": Role.KARIGAR},
+]
+
+# Bandaki (gold-loan) customers. Keyed by name — the seed is idempotent on name,
+# so re-running never duplicates a customer.
+BANDAKI_CUSTOMERS = [
+    {"name": "Hari Prasad Sharma", "phone": "+977-9841000001", "location": "Ason, Kathmandu"},
+    {"name": "Kamala Shrestha", "phone": "+977-9841000002", "location": "Patan, Lalitpur"},
+    {"name": "Bikash Tamang", "phone": "+977-9841000003", "location": "Bhaktapur"},
+    {"name": "Sunita Maharjan", "phone": "+977-9841000004", "location": "Kirtipur"},
+    {"name": "Rajesh Gurung", "phone": "+977-9841000005", "location": "Thamel, Kathmandu"},
+    {"name": "Gita Adhikari", "phone": "+977-9841000006", "location": "Baneshwor, Kathmandu"},
+    {"name": "Nabin Karki", "phone": "+977-9841000007", "location": "Chabahil, Kathmandu"},
+    {"name": "Laxmi Bhandari", "phone": "+977-9841000008", "location": "Pulchowk, Lalitpur"},
+    {"name": "Deepak Thapa", "phone": "+977-9841000009", "location": "Balaju, Kathmandu"},
+    {"name": "Sarita Rai", "phone": "+977-9841000010", "location": "Boudha, Kathmandu"},
+    # Two inactive customers so the UI's active/inactive filter has something
+    # to show on both sides.
+    {"name": "Mohan Lal Newar", "phone": "+977-9841000011", "location": "Jhamsikhel, Lalitpur", "is_active": False},
+    {"name": "Bishnu Kumari Dangol", "phone": "+977-9841000012", "location": "Sanepa, Lalitpur", "is_active": False},
+]
+
+BANDAKI_REMARKS = [
+    "", "", "Gold chain pledged.", "Bangles pledged (2 pcs).",
+    "Earrings + ring pledged.", "Renewed from an older loan.",
+    "Necklace pledged, 22kt.", "Partial repayment expected next month.",
 ]
 
 
@@ -149,6 +177,9 @@ class Command(BaseCommand):
         # --- Bulk demo data: >=100 gold and >=100 cash entries ---
         self._bulk_entries(shop, owner, profiles, ornaments)
 
+        # --- Bandaki: gold-loan customers and their loans ---
+        self._bandaki(shop, owner)
+
         self.stdout.write(self.style.SUCCESS("\nSeed complete."))
         self.stdout.write(f"All demo users share the password: {DEMO_PASSWORD}")
         self.stdout.write("Logins: owner / manager / karigar1 / karigar2")
@@ -201,3 +232,70 @@ class Command(BaseCommand):
             )
         if cash_needed:
             self.stdout.write(f"Bulk cash entries added: {cash_needed}")
+
+    def _bandaki(self, shop, owner, loan_target=40):
+        """Seed bandaki customers and loans.
+
+        Loan dates are relative to **today**, not fixed calendar dates: interest
+        accrues from ``loan_date`` on every read, so anchoring to today keeps the
+        demo showing a realistic spread of accrued amounts however long after
+        seeding the data is looked at.
+
+        Idempotent — customers are matched on name, and loans only top up to
+        ``loan_target`` so re-running doesn't keep piling on.
+        """
+        rng = random.Random(7)  # deterministic
+        today = timezone.localdate()
+
+        customers = []
+        created_count = 0
+        for spec in BANDAKI_CUSTOMERS:
+            customer, created = BandakiCustomer.objects.get_or_create(
+                shop=shop,
+                name=spec["name"],
+                defaults={
+                    "phone": spec["phone"],
+                    "location": spec["location"],
+                    "remarks": spec.get("remarks", ""),
+                    "is_active": spec.get("is_active", True),
+                    "created_by": owner,
+                    "updated_by": owner,
+                },
+            )
+            customers.append(customer)
+            created_count += int(created)
+        self.stdout.write(
+            f"Bandaki customers: {len(customers)} ({created_count} created)"
+        )
+
+        loans_needed = max(0, loan_target - BandakiLoan.objects.filter(shop=shop).count())
+        for i in range(loans_needed):
+            customer = customers[i % len(customers)] if i < len(customers) else rng.choice(customers)
+            period = (
+                InterestPeriod.MONTHLY if rng.random() < 0.75 else InterestPeriod.YEARLY
+            )
+            # Monthly loans quote ~1-3% per month; yearly ones ~12-24% per year.
+            if period == InterestPeriod.MONTHLY:
+                rate = Decimal(f"{rng.uniform(1.0, 3.0):.3f}")
+            else:
+                rate = Decimal(f"{rng.uniform(12.0, 24.0):.3f}")
+            BandakiLoan.objects.create(
+                shop=shop,
+                customer=customer,
+                # Spread over the last two years so accrued interest varies from
+                # a few days' worth up to a couple of years'.
+                loan_date=today - datetime.timedelta(days=rng.randint(3, 730)),
+                gross_amount=Decimal(f"{rng.randint(10, 600) * 500}.00"),
+                interest_rate=rate,
+                interest_period=period,
+                remarks=rng.choice(BANDAKI_REMARKS),
+                # A fifth are already repaid/closed, so the active filter and the
+                # history view both have material.
+                is_active=rng.random() >= 0.2,
+                created_by=owner,
+                updated_by=owner,
+            )
+        if loans_needed:
+            self.stdout.write(f"Bandaki loans added: {loans_needed}")
+        else:
+            self.stdout.write("Bandaki loans already at target.")

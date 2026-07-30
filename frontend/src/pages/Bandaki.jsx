@@ -19,6 +19,18 @@ const NPR = <sub className="ml-0.5 text-[10px] font-normal text-gray-400">npr</s
 
 const PERIOD_SHORT = { monthly: "mo", yearly: "yr" };
 
+// "Sekda byaj" (सैकडा ब्याज) is how these loans are quoted over the counter:
+// rupees of interest on every Rs 100 lent, per month. Rs 2 sekda is 2% a month,
+// so it is the monthly rate as-is and twelve times that as a yearly one.
+const MONTHS_PER_YEAR = 12;
+const round3 = (n) => Math.round(n * 1000) / 1000;
+const perMonths = (period) => (period === "yearly" ? MONTHS_PER_YEAR : 1);
+
+const sekdaToRate = (sekda, period) =>
+  sekda === "" || sekda == null ? "" : round3(Number(sekda) * perMonths(period));
+const rateToSekda = (rate, period) =>
+  rate === "" || rate == null ? "" : round3(Number(rate) / perMonths(period));
+
 export default function Bandaki() {
   const [tab, setTab] = useState("loans");
 
@@ -782,11 +794,13 @@ function DeletePayment({ payment, onClose, onDone }) {
 function LoanForm({ loan, customers, ornaments, refreshCustomers, onClose, onSaved }) {
   const isEdit = Boolean(loan.id);
   const calendar = useSettingsStore((s) => s.calendar);
-  const { register, handleSubmit, control, setValue } = useForm({
+  const { register, handleSubmit, control, setValue, getValues } = useForm({
     defaultValues: {
       // Select values are strings, matching what the native select reported.
       customer: loan.customer != null ? String(loan.customer) : "",
       gross_amount: loan.gross_amount ?? "",
+      // Not sent to the server — a shopkeeper-facing way to enter the rate.
+      sekda: rateToSekda(loan.interest_rate ?? "", loan.interest_period ?? "monthly"),
       interest_rate: loan.interest_rate ?? "",
       interest_period: loan.interest_period ?? "monthly",
       remarks: loan.remarks ?? "",
@@ -866,16 +880,36 @@ function LoanForm({ loan, customers, ornaments, refreshCustomers, onClose, onSav
           </Field>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <Field label="Sekda byaj">
+            <input className="input" type="number" step="0.01" min="0" placeholder="e.g. 2"
+              {...register("sekda", {
+                onChange: (e) =>
+                  setValue("interest_rate", sekdaToRate(e.target.value, getValues("interest_period"))),
+              })} />
+            <p className="mt-1 text-xs text-gray-400">Rs per Rs 100, a month</p>
+          </Field>
           <Field label="Interest rate (%)" required>
             <input className="input" type="number" step="0.001" min="0"
-              {...register("interest_rate", { required: true })} />
+              {...register("interest_rate", {
+                required: true,
+                // Typed straight in, the sekda box follows — the two always agree.
+                onChange: (e) =>
+                  setValue("sekda", rateToSekda(e.target.value, getValues("interest_period"))),
+              })} />
           </Field>
           <Field label="Interest period" required>
             <FormSelect
               control={control}
               name="interest_period"
               rules={{ required: true }}
+              // The sekda figure stays per-month, so the rate is re-quoted —
+              // unless the rate was typed in directly, which leaves sekda empty.
+              onValueChange={(period) => {
+                const sekda = getValues("sekda");
+                if (sekda === "" || sekda == null) return;
+                setValue("interest_rate", sekdaToRate(sekda, period));
+              }}
               options={[
                 { value: "monthly", label: "Monthly" },
                 { value: "yearly", label: "Yearly" },

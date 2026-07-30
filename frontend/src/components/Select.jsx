@@ -280,8 +280,11 @@ export default function Select({
  * react-hook-form binding for `Select`. A custom control can't be `register`ed
  * (there is no native input for RHF to attach a ref to), so it goes through
  * `Controller`. Emits strings just like the native select it replaces.
+ *
+ * `onValueChange` runs after the field is updated, for the cases where picking
+ * an option has to touch another field (e.g. re-deriving a rate).
  */
-export function FormSelect({ control, name, rules, defaultValue, ...rest }) {
+export function FormSelect({ control, name, rules, defaultValue, onValueChange, ...rest }) {
   return (
     <Controller
       control={control}
@@ -292,7 +295,10 @@ export function FormSelect({ control, name, rules, defaultValue, ...rest }) {
         <Select
           {...rest}
           value={field.value}
-          onChange={field.onChange}
+          onChange={(v) => {
+            field.onChange(v);
+            onValueChange?.(v);
+          }}
           onBlur={field.onBlur}
           name={field.name}
           aria-invalid={fieldState.invalid || undefined}
